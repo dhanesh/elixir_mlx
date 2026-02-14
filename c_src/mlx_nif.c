@@ -563,6 +563,10 @@ DEF_UNARY_OP(nif_logical_not, mlx_logical_not)
 DEF_UNARY_OP(nif_isnan,       mlx_isnan)
 DEF_UNARY_OP(nif_isinf,       mlx_isinf)
 DEF_UNARY_OP(nif_sigmoid,     mlx_sigmoid)
+DEF_UNARY_OP(nif_bitwise_invert, mlx_bitwise_invert)
+DEF_UNARY_OP(nif_conjugate,   mlx_conjugate)
+DEF_UNARY_OP(nif_real_op,     mlx_real)
+DEF_UNARY_OP(nif_imag_op,     mlx_imag)
 
 // ============================================================
 // NIF: Binary operations (a, b, stream) -> {:ok, arr}
@@ -585,6 +589,8 @@ DEF_BINARY_OP(nif_greater_equal, mlx_greater_equal)
 DEF_BINARY_OP(nif_logical_and,   mlx_logical_and)
 DEF_BINARY_OP(nif_logical_or,    mlx_logical_or)
 DEF_BINARY_OP(nif_matmul,        mlx_matmul)
+DEF_BINARY_OP(nif_maximum,       mlx_maximum)
+DEF_BINARY_OP(nif_minimum,       mlx_minimum)
 
 // ============================================================
 // NIF: Reduction operations (arr, axes|nil, keepdims, stream)
@@ -595,6 +601,8 @@ DEF_REDUCE_OP(nif_prod, mlx_prod_all, mlx_prod)
 DEF_REDUCE_OP(nif_mean, mlx_mean_all, mlx_mean)
 DEF_REDUCE_OP(nif_min,  mlx_min_all,  mlx_min)
 DEF_REDUCE_OP(nif_max,  mlx_max_all,  mlx_max)
+DEF_REDUCE_OP(nif_all_op, mlx_all_all, mlx_all_axes)
+DEF_REDUCE_OP(nif_any_op, mlx_any_all, mlx_any)
 
 // argmax(arr, axis, keepdims, stream) -> {:ok, arr}
 static ERL_NIF_TERM nif_argmax(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
@@ -1099,6 +1107,103 @@ static ERL_NIF_TERM nif_concatenate(ErlNifEnv* env, int argc, const ERL_NIF_TERM
     return wrap_array(env, result);
 }
 
+// stack(arr_ref_list, axis, stream) -> {:ok, arr}
+// Takes a list of array refs, builds a vector_array, calls mlx_stack
+static ERL_NIF_TERM nif_stack(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc;
+    MlxStreamResource *s;
+    if (!enif_get_resource(env, argv[2], MLX_STREAM_RESOURCE, (void**)&s))
+        return MLX_NIF_ERROR(env, "expected stream");
+
+    int axis;
+    if (!enif_get_int(env, argv[1], &axis))
+        return MLX_NIF_ERROR(env, "expected int axis");
+
+    unsigned int list_len;
+    if (!enif_get_list_length(env, argv[0], &list_len))
+        return MLX_NIF_ERROR(env, "expected list of arrays");
+
+    mlx_vector_array vec = mlx_vector_array_new();
+    if (!vec.ctx) return MLX_NIF_ERROR(env, "failed to create vector_array");
+
+    ERL_NIF_TERM head, tail = argv[0];
+    for (unsigned int i = 0; i < list_len; i++) {
+        if (!enif_get_list_cell(env, tail, &head, &tail)) {
+            mlx_vector_array_free(vec);
+            return MLX_NIF_ERROR(env, "bad list element");
+        }
+        MlxArrayResource *arr;
+        if (!enif_get_resource(env, head, MLX_ARRAY_RESOURCE, (void**)&arr)) {
+            mlx_vector_array_free(vec);
+            return MLX_NIF_ERROR(env, "expected array in list");
+        }
+        int ret = mlx_vector_array_append_value(vec, arr->inner);
+        if (ret != 0) {
+            mlx_vector_array_free(vec);
+            return MLX_NIF_ERROR(env, last_error_msg);
+        }
+    }
+
+    mlx_array result = mlx_array_new();
+    int ret = mlx_stack(&result, vec, axis, s->inner);
+    mlx_vector_array_free(vec);
+    if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
+    return wrap_array(env, result);
+}
+
+// slice_update(src, update, start_list, stop_list, strides_list, stream) -> {:ok, arr}
+static ERL_NIF_TERM nif_slice_update(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc;
+    MlxArrayResource *src, *update;
+    MlxStreamResource *s;
+    if (!enif_get_resource(env, argv[0], MLX_ARRAY_RESOURCE, (void**)&src))
+        return MLX_NIF_ERROR(env, "expected source array");
+    if (!enif_get_resource(env, argv[1], MLX_ARRAY_RESOURCE, (void**)&update))
+        return MLX_NIF_ERROR(env, "expected update array");
+    if (!enif_get_resource(env, argv[5], MLX_STREAM_RESOURCE, (void**)&s))
+        return MLX_NIF_ERROR(env, "expected stream");
+
+    int start[16], stop[16], strides[16];
+    int n_start, n_stop, n_strides;
+    if (!get_int_list(env, argv[2], start, &n_start))
+        return MLX_NIF_ERROR(env, "expected start list");
+    if (!get_int_list(env, argv[3], stop, &n_stop))
+        return MLX_NIF_ERROR(env, "expected stop list");
+    if (!get_int_list(env, argv[4], strides, &n_strides))
+        return MLX_NIF_ERROR(env, "expected strides list");
+
+    mlx_array result = mlx_array_new();
+    int ret = mlx_slice_update(&result, src->inner, update->inner,
+                               start, (size_t)n_start,
+                               stop, (size_t)n_stop,
+                               strides, (size_t)n_strides,
+                               s->inner);
+    if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
+    return wrap_array(env, result);
+}
+
+// view(arr, dtype_atom, stream) -> {:ok, arr}
+// Bitcast: reinterpret array bits as a different dtype
+static ERL_NIF_TERM nif_view(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc;
+    MlxArrayResource *a;
+    if (!enif_get_resource(env, argv[0], MLX_ARRAY_RESOURCE, (void**)&a))
+        return MLX_NIF_ERROR(env, "expected array");
+
+    mlx_dtype dtype;
+    if (!dtype_from_atom(env, argv[1], &dtype))
+        return MLX_NIF_ERROR(env, "invalid dtype");
+
+    MlxStreamResource *s;
+    if (!enif_get_resource(env, argv[2], MLX_STREAM_RESOURCE, (void**)&s))
+        return MLX_NIF_ERROR(env, "expected stream");
+
+    mlx_array result = mlx_array_new();
+    int ret = mlx_view(&result, a->inner, dtype, s->inner);
+    if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
+    return wrap_array(env, result);
+}
+
 // ============================================================
 // NIF: Device and Stream management
 // ============================================================
@@ -1285,6 +1390,10 @@ static ErlNifFunc nif_funcs[] = {
     {"mlx_isnan",          2, nif_isnan,              0},
     {"mlx_isinf",          2, nif_isinf,              0},
     {"mlx_sigmoid",        2, nif_sigmoid,            0},
+    {"mlx_bitwise_invert", 2, nif_bitwise_invert,    0},
+    {"mlx_conjugate",      2, nif_conjugate,          0},
+    {"mlx_real",           2, nif_real_op,            0},
+    {"mlx_imag",           2, nif_imag_op,            0},
 
     // Binary ops
     {"mlx_add",            3, nif_add,                0},
@@ -1304,6 +1413,8 @@ static ErlNifFunc nif_funcs[] = {
     {"mlx_logical_and",    3, nif_logical_and,        0},
     {"mlx_logical_or",     3, nif_logical_or,         0},
     {"mlx_matmul",         3, nif_matmul,             0},
+    {"mlx_maximum",        3, nif_maximum,            0},
+    {"mlx_minimum",        3, nif_minimum,            0},
 
     // Reduction ops
     {"mlx_sum",            4, nif_sum,                0},
@@ -1313,6 +1424,8 @@ static ErlNifFunc nif_funcs[] = {
     {"mlx_max",            4, nif_max,                0},
     {"mlx_argmax",         4, nif_argmax,             0},
     {"mlx_argmin",         4, nif_argmin,             0},
+    {"mlx_all",            4, nif_all_op,             0},
+    {"mlx_any",            4, nif_any_op,             0},
 
     // Shape ops
     {"mlx_reshape",        3, nif_reshape,            0},
@@ -1348,6 +1461,9 @@ static ErlNifFunc nif_funcs[] = {
     {"mlx_repeat",         4, nif_repeat,             0},
     {"mlx_tile",           3, nif_tile,               0},
     {"mlx_concatenate",    3, nif_concatenate,         0},
+    {"mlx_stack",          3, nif_stack,               0},
+    {"mlx_slice_update",   6, nif_slice_update,        0},
+    {"mlx_view",           3, nif_view,                0},
 
     // Device / Stream
     {"default_cpu_stream", 0, nif_default_cpu_stream, 0},

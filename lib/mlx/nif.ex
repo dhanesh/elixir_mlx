@@ -62,6 +62,10 @@ defmodule Mlx.NIF do
   def mlx_isnan(_arr, _stream), do: :erlang.nif_error(:not_loaded)
   def mlx_isinf(_arr, _stream), do: :erlang.nif_error(:not_loaded)
   def mlx_sigmoid(_arr, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_bitwise_invert(_arr, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_conjugate(_arr, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_real(_arr, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_imag(_arr, _stream), do: :erlang.nif_error(:not_loaded)
 
   # --- Binary ops ---
   def mlx_add(_a, _b, _stream), do: :erlang.nif_error(:not_loaded)
@@ -81,6 +85,8 @@ defmodule Mlx.NIF do
   def mlx_logical_and(_a, _b, _stream), do: :erlang.nif_error(:not_loaded)
   def mlx_logical_or(_a, _b, _stream), do: :erlang.nif_error(:not_loaded)
   def mlx_matmul(_a, _b, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_maximum(_a, _b, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_minimum(_a, _b, _stream), do: :erlang.nif_error(:not_loaded)
 
   # --- Bitwise ops ---
   def mlx_bitwise_and(_a, _b, _stream), do: :erlang.nif_error(:not_loaded)
@@ -97,6 +103,8 @@ defmodule Mlx.NIF do
   def mlx_max(_arr, _axes, _keepdims, _stream), do: :erlang.nif_error(:not_loaded)
   def mlx_argmax(_arr, _axis, _keepdims, _stream), do: :erlang.nif_error(:not_loaded)
   def mlx_argmin(_arr, _axis, _keepdims, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_all(_arr, _axes, _keepdims, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_any(_arr, _axes, _keepdims, _stream), do: :erlang.nif_error(:not_loaded)
 
   # --- Shape ops ---
   def mlx_reshape(_arr, _shape, _stream), do: :erlang.nif_error(:not_loaded)
@@ -128,8 +136,16 @@ defmodule Mlx.NIF do
   def mlx_repeat(_arr, _repeats, _axis, _stream), do: :erlang.nif_error(:not_loaded)
   def mlx_tile(_arr, _reps, _stream), do: :erlang.nif_error(:not_loaded)
 
-  # --- Concatenate (uses vector_array) ---
+  # --- Concatenate / Stack (uses vector_array) ---
   def mlx_concatenate(_arrays, _axis, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_stack(_arrays, _axis, _stream), do: :erlang.nif_error(:not_loaded)
+
+  # --- Slice update ---
+  def mlx_slice_update(_src, _update, _start, _stop, _strides, _stream),
+    do: :erlang.nif_error(:not_loaded)
+
+  # --- View (bitcast) ---
+  def mlx_view(_arr, _dtype, _stream), do: :erlang.nif_error(:not_loaded)
 
   # --- Selection ops ---
   def mlx_where(_cond, _x, _y, _stream), do: :erlang.nif_error(:not_loaded)

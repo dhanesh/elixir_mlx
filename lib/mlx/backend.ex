@@ -609,6 +609,129 @@ defmodule Mlx.Backend do
     to_nx(out, result)
   end
 
+  # --- Element-wise max/min (binary) ---
+
+  @impl true
+  def max(%Nx.Tensor{} = out, %Nx.Tensor{} = left, %Nx.Tensor{} = right) do
+    l = from_ref(left)
+    r = from_ref(right)
+    result = unwrap!(Mlx.NIF.mlx_maximum(l, r, s()))
+    to_nx(out, result)
+  end
+
+  @impl true
+  def min(%Nx.Tensor{} = out, %Nx.Tensor{} = left, %Nx.Tensor{} = right) do
+    l = from_ref(left)
+    r = from_ref(right)
+    result = unwrap!(Mlx.NIF.mlx_minimum(l, r, s()))
+    to_nx(out, result)
+  end
+
+  # --- Bitwise not (unary) ---
+
+  @impl true
+  def bitwise_not(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor) do
+    ref = from_ref(tensor)
+    result = unwrap!(Mlx.NIF.mlx_bitwise_invert(ref, s()))
+    to_nx(out, result)
+  end
+
+  # --- Logical xor (composed via not_equal on boolean) ---
+
+  @impl true
+  def logical_xor(%Nx.Tensor{} = out, %Nx.Tensor{} = left, %Nx.Tensor{} = right) do
+    l = from_ref(left)
+    r = from_ref(right)
+    result = unwrap!(Mlx.NIF.mlx_not_equal(l, r, s()))
+    to_nx(out, result)
+  end
+
+  # --- Boolean reductions: all / any ---
+
+  @impl true
+  def all(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor, opts) do
+    reduce_op(:mlx_all, out, tensor, opts)
+  end
+
+  @impl true
+  def any(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor, opts) do
+    reduce_op(:mlx_any, out, tensor, opts)
+  end
+
+  # --- Complex number ops ---
+
+  @impl true
+  def conjugate(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor) do
+    ref = from_ref(tensor)
+    result = unwrap!(Mlx.NIF.mlx_conjugate(ref, s()))
+    to_nx(out, result)
+  end
+
+  @impl true
+  def real(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor) do
+    ref = from_ref(tensor)
+    result = unwrap!(Mlx.NIF.mlx_real(ref, s()))
+    to_nx(out, result)
+  end
+
+  @impl true
+  def imag(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor) do
+    ref = from_ref(tensor)
+    result = unwrap!(Mlx.NIF.mlx_imag(ref, s()))
+    to_nx(out, result)
+  end
+
+  # --- Stack ---
+
+  @impl true
+  def stack(%Nx.Tensor{} = out, tensors, axis) do
+    refs = Enum.map(tensors, &from_ref/1)
+    result = unwrap!(Mlx.NIF.mlx_stack(refs, axis, s()))
+    to_nx(out, result)
+  end
+
+  # --- Put slice ---
+
+  @impl true
+  def put_slice(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor, start_indices, %Nx.Tensor{} = slice) do
+    ref = from_ref(tensor)
+    slice_ref = from_ref(slice)
+
+    # Compute stop indices from start + slice shape
+    slice_shape = Tuple.to_list(slice.shape)
+
+    stop_indices =
+      Enum.zip_with(start_indices, slice_shape, fn start, len -> start + len end)
+
+    strides = List.duplicate(1, length(start_indices))
+
+    result =
+      unwrap!(Mlx.NIF.mlx_slice_update(ref, slice_ref, start_indices, stop_indices, strides, s()))
+
+    to_nx(out, result)
+  end
+
+  # --- Bitcast ---
+
+  @impl true
+  def bitcast(%Nx.Tensor{type: type} = out, %Nx.Tensor{} = tensor) do
+    ref = from_ref(tensor)
+    result = unwrap!(Mlx.NIF.mlx_view(ref, Mlx.Dtype.to_mlx(type), s()))
+    to_nx(out, result)
+  end
+
+  # --- Cube root (composed via pow(x, 1/3)) ---
+
+  @impl true
+  def cbrt(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor) do
+    ref = from_ref(tensor)
+    # Create scalar 1/3
+    third_bin = number_to_binary(1.0 / 3.0, out.type)
+    third = unwrap!(Mlx.NIF.from_binary(third_bin, [], mlx_dtype(out)))
+    result = unwrap!(Mlx.NIF.mlx_power(ref, third, s()))
+    to_nx(out, result)
+  end
+
   # --- Private helpers ---
 
   defp number_to_binary(number, {type, size}) do
@@ -662,32 +785,22 @@ defmodule Mlx.Backend do
   # These raise clear errors instead of generating compiler warnings.
 
   @not_implemented_ops ~w(
-    all any bitcast bitwise_not cbrt conjugate conv count_leading_zeros
-    fft from_pointer gather ifft imag indexed_add indexed_put logical_xor
-    max min population_count put_slice real reduce stack to_batched
-    to_pointer window_max window_min window_product window_reduce
-    window_scatter_max window_scatter_min window_sum
+    conv count_leading_zeros fft from_pointer gather ifft indexed_add
+    indexed_put population_count reduce to_batched to_pointer window_max
+    window_min window_product window_reduce window_scatter_max
+    window_scatter_min window_sum
   )a
 
   for op <- @not_implemented_ops do
     arity =
       case op do
-        op when op in [:bitcast, :bitwise_not, :cbrt, :conjugate, :imag, :real, :to_pointer] ->
+        :to_pointer ->
           2
 
-        op when op in [:all, :any, :fft, :ifft, :logical_xor, :max, :min, :stack, :to_batched] ->
+        op when op in [:fft, :ifft, :to_batched] ->
           3
 
-        op
-        when op in [
-               :conv,
-               :gather,
-               :put_slice,
-               :window_max,
-               :window_min,
-               :window_product,
-               :window_sum
-             ] ->
+        op when op in [:conv, :gather, :window_max, :window_min, :window_product, :window_sum] ->
           4
 
         op when op in [:indexed_add, :indexed_put] ->

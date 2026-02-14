@@ -520,6 +520,170 @@ defmodule MlxTest do
     end
   end
 
+  describe "element-wise max/min" do
+    test "max selects element-wise maximum" do
+      a = Nx.tensor([1.0, 5.0, 3.0])
+      b = Nx.tensor([4.0, 2.0, 6.0])
+      result = Nx.max(a, b)
+      assert Nx.to_flat_list(result) == [4.0, 5.0, 6.0]
+    end
+
+    test "min selects element-wise minimum" do
+      a = Nx.tensor([1.0, 5.0, 3.0])
+      b = Nx.tensor([4.0, 2.0, 6.0])
+      result = Nx.min(a, b)
+      assert Nx.to_flat_list(result) == [1.0, 2.0, 3.0]
+    end
+
+    test "max with 2D tensors" do
+      a = Nx.tensor([[1.0, 6.0], [3.0, 4.0]])
+      b = Nx.tensor([[5.0, 2.0], [7.0, 0.0]])
+      result = Nx.max(a, b)
+      assert Nx.to_flat_list(result) == [5.0, 6.0, 7.0, 4.0]
+    end
+
+    test "min with broadcasting" do
+      a = Nx.tensor([[1.0, 5.0], [3.0, 2.0]])
+      b = Nx.tensor([3.0, 3.0])
+      result = Nx.min(a, b)
+      assert Nx.to_flat_list(result) == [1.0, 3.0, 3.0, 2.0]
+    end
+  end
+
+  describe "bitwise_not" do
+    test "inverts bits" do
+      t = Nx.tensor([0, 255], type: {:u, 8})
+      result = Nx.bitwise_not(t)
+      assert Nx.to_flat_list(result) == [255, 0]
+    end
+
+    test "inverts signed integer" do
+      t = Nx.tensor([0, 1, -1], type: {:s, 32})
+      result = Nx.bitwise_not(t)
+      assert Nx.to_flat_list(result) == [-1, -2, 0]
+    end
+  end
+
+  describe "logical_xor" do
+    test "xor on boolean-like tensors" do
+      a = Nx.tensor([1, 0, 1, 0], type: {:u, 8})
+      b = Nx.tensor([1, 1, 0, 0], type: {:u, 8})
+      result = Nx.logical_xor(a, b)
+      assert Nx.to_flat_list(result) == [0, 1, 1, 0]
+    end
+  end
+
+  describe "all/any reductions" do
+    test "all returns true when all elements are true" do
+      t = Nx.tensor([1, 1, 1], type: {:u, 8})
+      assert Nx.to_number(Nx.all(t)) == 1
+    end
+
+    test "all returns false when any element is false" do
+      t = Nx.tensor([1, 0, 1], type: {:u, 8})
+      assert Nx.to_number(Nx.all(t)) == 0
+    end
+
+    test "any returns true when any element is true" do
+      t = Nx.tensor([0, 0, 1], type: {:u, 8})
+      assert Nx.to_number(Nx.any(t)) == 1
+    end
+
+    test "any returns false when all elements are false" do
+      t = Nx.tensor([0, 0, 0], type: {:u, 8})
+      assert Nx.to_number(Nx.any(t)) == 0
+    end
+
+    test "all with axis" do
+      t = Nx.tensor([[1, 1], [1, 0]], type: {:u, 8})
+      result = Nx.all(t, axes: [0])
+      assert Nx.to_flat_list(result) == [1, 0]
+    end
+
+    test "any with axis" do
+      t = Nx.tensor([[0, 0], [1, 0]], type: {:u, 8})
+      result = Nx.any(t, axes: [0])
+      assert Nx.to_flat_list(result) == [1, 0]
+    end
+  end
+
+  describe "stack" do
+    test "stack 1D tensors along axis 0" do
+      a = Nx.tensor([1.0, 2.0])
+      b = Nx.tensor([3.0, 4.0])
+      result = Nx.stack([a, b])
+      assert Nx.shape(result) == {2, 2}
+      assert Nx.to_flat_list(result) == [1.0, 2.0, 3.0, 4.0]
+    end
+
+    test "stack along axis 1" do
+      a = Nx.tensor([1.0, 2.0])
+      b = Nx.tensor([3.0, 4.0])
+      result = Nx.stack([a, b], axis: 1)
+      assert Nx.shape(result) == {2, 2}
+      assert Nx.to_flat_list(result) == [1.0, 3.0, 2.0, 4.0]
+    end
+
+    test "stack three tensors" do
+      a = Nx.tensor([1.0, 2.0])
+      b = Nx.tensor([3.0, 4.0])
+      c = Nx.tensor([5.0, 6.0])
+      result = Nx.stack([a, b, c])
+      assert Nx.shape(result) == {3, 2}
+      assert Nx.to_flat_list(result) == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+    end
+  end
+
+  describe "put_slice" do
+    test "put_slice into 1D tensor" do
+      t = Nx.tensor([0.0, 0.0, 0.0, 0.0, 0.0])
+      slice = Nx.tensor([1.0, 2.0, 3.0])
+      result = Nx.put_slice(t, [1], slice)
+      assert Nx.to_flat_list(result) == [0.0, 1.0, 2.0, 3.0, 0.0]
+    end
+
+    test "put_slice into 2D tensor" do
+      t = Nx.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
+      slice = Nx.tensor([[1.0, 2.0], [3.0, 4.0]])
+      result = Nx.put_slice(t, [0, 1], slice)
+      assert Nx.to_flat_list(result) == [0.0, 1.0, 2.0, 0.0, 3.0, 4.0, 0.0, 0.0, 0.0]
+    end
+  end
+
+  describe "bitcast" do
+    test "bitcast f32 to u32" do
+      t = Nx.tensor([1.0], type: {:f, 32})
+      result = Nx.bitcast(t, {:u, 32})
+      assert Nx.type(result) == {:u, 32}
+      # IEEE 754: 1.0f = 0x3F800000 = 1065353216
+      assert Nx.to_flat_list(result) == [1_065_353_216]
+    end
+
+    test "bitcast preserves shape" do
+      t = Nx.tensor([[1.0, 2.0], [3.0, 4.0]], type: {:f, 32})
+      result = Nx.bitcast(t, {:s, 32})
+      assert Nx.shape(result) == {2, 2}
+      assert Nx.type(result) == {:s, 32}
+    end
+  end
+
+  describe "cbrt" do
+    test "cube root of perfect cubes" do
+      t = Nx.tensor([8.0, 27.0, 64.0])
+      result = Nx.cbrt(t)
+      [a, b, c] = Nx.to_flat_list(result)
+      assert_in_delta a, 2.0, 1.0e-5
+      assert_in_delta b, 3.0, 1.0e-5
+      assert_in_delta c, 4.0, 1.0e-4
+    end
+
+    test "cube root of 1 is 1" do
+      t = Nx.tensor(1.0)
+      result = Nx.cbrt(t)
+      assert_in_delta Nx.to_number(result), 1.0, 1.0e-6
+    end
+  end
+
   describe "numerical accuracy" do
     test "sigmoid approximation" do
       # sigmoid(x) = 1 / (1 + exp(-x))
