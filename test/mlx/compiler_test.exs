@@ -9,7 +9,7 @@ defmodule Mlx.CompilerTest do
     import Nx.Defn
 
     @defn_compiler Mlx.Compiler
-    defn add(a, b), do: Nx.add(a, b)
+    defn(add(a, b), do: Nx.add(a, b))
 
     @defn_compiler Mlx.Compiler
     defn chained(x) do

@@ -122,7 +122,9 @@ defmodule Mlx.NIF do
   def mlx_tril(_arr, _k, _stream), do: :erlang.nif_error(:not_loaded)
 
   # --- Pad, Repeat, Tile ops ---
-  def mlx_pad(_arr, _axes, _low_pad, _high_pad, _pad_value, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_pad(_arr, _axes, _low_pad, _high_pad, _pad_value, _stream),
+    do: :erlang.nif_error(:not_loaded)
+
   def mlx_repeat(_arr, _repeats, _axis, _stream), do: :erlang.nif_error(:not_loaded)
   def mlx_tile(_arr, _reps, _stream), do: :erlang.nif_error(:not_loaded)
 

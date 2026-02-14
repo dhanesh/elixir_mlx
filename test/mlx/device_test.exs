@@ -145,6 +145,7 @@ defmodule Mlx.DeviceTest do
       Mlx.Device.set_default(:gpu)
 
       t = Nx.iota({4, 4}, type: {:f, 32})
+
       result =
         t
         |> Nx.multiply(2.0)
@@ -204,7 +205,8 @@ defmodule Mlx.DeviceTest do
 
     test "matrix operations across device contexts" do
       Mlx.Device.set_default(:gpu)
-      a = Nx.tensor([[1.0, 0.0], [0.0, 1.0]])  # identity matrix
+      # identity matrix
+      a = Nx.tensor([[1.0, 0.0], [0.0, 1.0]])
 
       Mlx.Device.set_default(:cpu)
       b = Nx.tensor([[3.0, 4.0], [5.0, 6.0]])

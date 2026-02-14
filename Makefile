@@ -63,7 +63,7 @@ mlx-c:
 		cmake .. -DCMAKE_BUILD_TYPE=Release \
 			-DMLX_C_BUILD_EXAMPLES=OFF \
 			-DMLX_C_BUILD_TESTS=OFF \
-			-DCMAKE_CXX_FLAGS="-Wno-explicit-specialization-storage-class" && \
+			-DCMAKE_CXX_FLAGS="-Wno-error=unknown-warning-option -Wno-explicit-specialization-storage-class" && \
 		make -j$$(sysctl -n hw.ncpu); \
 	fi
 

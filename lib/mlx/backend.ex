@@ -471,8 +471,8 @@ defmodule Mlx.Backend do
     unwrap!(Mlx.NIF.mlx_take(ref, indices_ref, 0, s()))
   end
 
-  defp take_on_axis(ref, indices_ref, axis, _shape) do
-    ndim = tuple_size(_shape)
+  defp take_on_axis(ref, indices_ref, axis, shape) do
+    ndim = tuple_size(shape)
     # Build permutation: [axis, 0, 1, ..., axis-1, axis+1, ..., ndim-1]
     perm = [axis | Enum.filter(0..(ndim - 1), &(&1 != axis))]
     transposed = unwrap!(Mlx.NIF.mlx_transpose(ref, perm, s()))
@@ -614,19 +614,112 @@ defmodule Mlx.Backend do
   defp number_to_binary(number, {type, size}) do
     # Encode a single number as binary in the given Nx type
     case {type, size} do
-      {:u, 8} -> <<number::unsigned-native-8>>
-      {:u, 16} -> <<number::unsigned-native-16>>
-      {:u, 32} -> <<number::unsigned-native-32>>
-      {:u, 64} -> <<number::unsigned-native-64>>
-      {:s, 8} -> <<number::signed-native-8>>
-      {:s, 16} -> <<number::signed-native-16>>
-      {:s, 32} -> <<number::signed-native-32>>
-      {:s, 64} -> <<number::signed-native-64>>
-      {:f, 16} -> <<number::float-native-16>>
-      {:f, 32} -> <<number::float-native-32>>
-      {:bf, 16} -> Nx.Type.bf16(number)
-      {:c, 64} -> <<Nx.Type.real(number)::float-native-32, Nx.Type.imag(number)::float-native-32>>
-      {:pred, 8} -> <<if(number != 0, do: 1, else: 0)::native-8>>
+      {:u, 8} ->
+        <<number::unsigned-native-8>>
+
+      {:u, 16} ->
+        <<number::unsigned-native-16>>
+
+      {:u, 32} ->
+        <<number::unsigned-native-32>>
+
+      {:u, 64} ->
+        <<number::unsigned-native-64>>
+
+      {:s, 8} ->
+        <<number::signed-native-8>>
+
+      {:s, 16} ->
+        <<number::signed-native-16>>
+
+      {:s, 32} ->
+        <<number::signed-native-32>>
+
+      {:s, 64} ->
+        <<number::signed-native-64>>
+
+      {:f, 16} ->
+        <<number::float-native-16>>
+
+      {:f, 32} ->
+        <<number::float-native-32>>
+
+      {:bf, 16} ->
+        # bf16: truncate f32 to upper 16 bits
+        <<_::16, upper::binary-size(2)>> = <<number::float-native-32>>
+        upper
+
+      {:c, 64} ->
+        real = if is_number(number), do: number / 1, else: 0.0
+        <<real::float-native-32, 0.0::float-native-32>>
+
+      {:pred, 8} ->
+        <<if(number != 0, do: 1, else: 0)::native-8>>
+    end
+  end
+
+  # --- Not yet implemented callbacks ---
+  # These raise clear errors instead of generating compiler warnings.
+
+  @not_implemented_ops ~w(
+    all any bitcast bitwise_not cbrt conjugate conv count_leading_zeros
+    fft from_pointer gather ifft imag indexed_add indexed_put logical_xor
+    max min population_count put_slice real reduce stack to_batched
+    to_pointer window_max window_min window_product window_reduce
+    window_scatter_max window_scatter_min window_sum
+  )a
+
+  for op <- @not_implemented_ops do
+    arity =
+      case op do
+        op when op in [:bitcast, :bitwise_not, :cbrt, :conjugate, :imag, :real, :to_pointer] ->
+          2
+
+        op when op in [:all, :any, :fft, :ifft, :logical_xor, :max, :min, :stack, :to_batched] ->
+          3
+
+        op
+        when op in [
+               :conv,
+               :gather,
+               :put_slice,
+               :window_max,
+               :window_min,
+               :window_product,
+               :window_sum
+             ] ->
+          4
+
+        op when op in [:indexed_add, :indexed_put] ->
+          5
+
+        op when op in [:count_leading_zeros, :population_count] ->
+          2
+
+        :from_pointer ->
+          5
+
+        :reduce ->
+          5
+
+        :window_reduce ->
+          6
+
+        :window_scatter_max ->
+          6
+
+        :window_scatter_min ->
+          6
+
+        _ ->
+          3
+      end
+
+    args = Macro.generate_arguments(arity, __MODULE__)
+
+    @impl true
+    def unquote(op)(unquote_splicing(args)) do
+      raise ArgumentError, "#{unquote(op)} is not yet implemented in Mlx.Backend"
     end
   end
 end

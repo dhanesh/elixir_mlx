@@ -526,6 +526,7 @@ defmodule MlxTest do
       x = Nx.tensor([0.0, 1.0, -1.0])
       result = Nx.sigmoid(x)
       expected = [0.5, 0.7310586, 0.2689414]
+
       Enum.zip(Nx.to_flat_list(result), expected)
       |> Enum.each(fn {got, exp} -> assert_in_delta got, exp, 1.0e-4 end)
     end
@@ -533,6 +534,7 @@ defmodule MlxTest do
     test "log-exp roundtrip" do
       x = Nx.tensor([1.0, 2.0, 3.0])
       result = Nx.log(Nx.exp(x))
+
       Enum.zip(Nx.to_flat_list(result), [1.0, 2.0, 3.0])
       |> Enum.each(fn {got, exp} -> assert_in_delta got, exp, 1.0e-5 end)
     end
@@ -540,6 +542,7 @@ defmodule MlxTest do
     test "sqrt-square roundtrip" do
       x = Nx.tensor([4.0, 9.0, 16.0])
       result = Nx.pow(Nx.sqrt(x), 2)
+
       Enum.zip(Nx.to_flat_list(result), [4.0, 9.0, 16.0])
       |> Enum.each(fn {got, exp} -> assert_in_delta got, exp, 1.0e-4 end)
     end
