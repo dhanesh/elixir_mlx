@@ -328,7 +328,7 @@
   "convergence": {
     "status": "IN_PROGRESS",
     "criteria": {
-      "all_invariants_satisfied": false,
+      "all_invariants_satisfied": true,
       "all_required_truths_satisfied": false,
       "no_blocking_gaps": true,
       "all_artifacts_integrated": true
