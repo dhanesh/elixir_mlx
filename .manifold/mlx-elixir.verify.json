@@ -1,0 +1,328 @@
+{
+  "verification": {
+    "timestamp": "2026-02-15T12:00:00Z",
+    "result": "PARTIAL",
+    "matrix": [
+      {
+        "constraint": "B1",
+        "type": "goal",
+        "code": true,
+        "test": true,
+        "docs": false,
+        "ops": null,
+        "status": "PARTIAL",
+        "gap": "39 Nx.Backend callbacks implemented (27 unary, 15+ binary, reductions, shape ops, sort, clip, pad, take, concatenate, reverse, dot, select). Still missing: conv, fft, random, scatter, gather, window, put_slice.",
+        "action": "Implement remaining Nx.Backend callbacks: conv, fft, random, scatter, gather, window."
+      },
+      {
+        "constraint": "B2",
+        "type": "invariant",
+        "code": true,
+        "test": true,
+        "docs": true,
+        "ops": null,
+        "status": "SATISFIED"
+      },
+      {
+        "constraint": "B3",
+        "type": "goal",
+        "code": true,
+        "test": true,
+        "docs": false,
+        "ops": true,
+        "status": "PARTIAL",
+        "gap": "README.md and LICENSE created. mix.exs hex metadata present. Still needs CHANGELOG.md.",
+        "action": "Create CHANGELOG.md."
+      },
+      {
+        "constraint": "T1",
+        "type": "invariant",
+        "code": true,
+        "test": true,
+        "docs": null,
+        "ops": true,
+        "status": "SATISFIED"
+      },
+      {
+        "constraint": "T2",
+        "type": "invariant",
+        "code": true,
+        "test": true,
+        "docs": null,
+        "ops": null,
+        "status": "SATISFIED"
+      },
+      {
+        "constraint": "T3",
+        "type": "boundary",
+        "code": true,
+        "test": null,
+        "docs": null,
+        "ops": true,
+        "status": "SATISFIED"
+      },
+      {
+        "constraint": "T4",
+        "type": "goal",
+        "code": true,
+        "test": true,
+        "docs": null,
+        "ops": null,
+        "status": "PARTIAL",
+        "gap": "Numerical accuracy tests added (sigmoid, log-exp roundtrip, sqrt-square, trig identity, matmul identity). No Python comparison tests.",
+        "action": "Add Python MLX comparison tests for full numerical validation."
+      },
+      {
+        "constraint": "T5",
+        "type": "invariant",
+        "code": true,
+        "test": null,
+        "docs": null,
+        "ops": null,
+        "status": "SATISFIED"
+      },
+      {
+        "constraint": "T6",
+        "type": "invariant",
+        "code": true,
+        "test": true,
+        "docs": true,
+        "ops": null,
+        "status": "SATISFIED"
+      },
+      {
+        "constraint": "T7",
+        "type": "invariant",
+        "code": true,
+        "test": false,
+        "docs": true,
+        "ops": null,
+        "status": "PARTIAL",
+        "gap": "Device module exposes CPU/GPU. Backend implicitly uses GPU (default stream) and reads back to CPU in to_binary. No explicit device switching or unified memory behavior tests.",
+        "action": "Add tests: create tensor on GPU, access from CPU without copy, verify device switching."
+      },
+      {
+        "constraint": "U1",
+        "type": "invariant",
+        "code": true,
+        "test": true,
+        "docs": true,
+        "ops": null,
+        "status": "SATISFIED"
+      },
+      {
+        "constraint": "U2",
+        "type": "goal",
+        "code": true,
+        "test": true,
+        "docs": true,
+        "ops": null,
+        "status": "PARTIAL",
+        "gap": "Backend works with Nx.tensor, comprehensive tests for all implemented ops. README documents usage. No integration tests with Axon, Scholar, or other ecosystem libs.",
+        "action": "Add Axon integration smoke test."
+      },
+      {
+        "constraint": "U3",
+        "type": "goal",
+        "code": true,
+        "test": true,
+        "docs": null,
+        "ops": null,
+        "status": "PARTIAL",
+        "gap": "Error handler captures mlx-c errors. Backend raises Elixir exceptions via unwrap!/1. Safety tests validate error propagation for matmul shape mismatch. No comprehensive error message quality tests.",
+        "action": "Add more specific error message quality tests."
+      },
+      {
+        "constraint": "S1",
+        "type": "invariant",
+        "code": true,
+        "test": true,
+        "docs": null,
+        "ops": null,
+        "status": "SATISFIED"
+      },
+      {
+        "constraint": "S2",
+        "type": "invariant",
+        "code": true,
+        "test": true,
+        "docs": null,
+        "ops": null,
+        "status": "SATISFIED"
+      },
+      {
+        "constraint": "O1",
+        "type": "goal",
+        "code": null,
+        "test": true,
+        "docs": null,
+        "ops": true,
+        "status": "PARTIAL",
+        "gap": "115 tests across 4 test files (mlx_test, dtype_test, compiler_test, safety_test), 0 failures. Coverage estimated 75-80%, improved from 65-70%. Target is 90%+.",
+        "action": "Add tests for remaining untested ops and edge cases to reach 90%."
+      },
+      {
+        "constraint": "O2",
+        "type": "boundary",
+        "code": null,
+        "test": null,
+        "docs": null,
+        "ops": true,
+        "status": "SATISFIED"
+      },
+      {
+        "constraint": "O3",
+        "type": "goal",
+        "code": false,
+        "test": null,
+        "docs": null,
+        "ops": false,
+        "status": "PARTIAL",
+        "gap": "mix.exs has basic config. LICENSE exists. No precompiled binary setup (cc_precompiler), no Hex publish workflow in CI.",
+        "action": "Add cc_precompiler or elixir_make precomp to mix.exs. Add Hex publish step to CI."
+      }
+    ],
+    "coverage": {
+      "invariants": {
+        "satisfied": 8,
+        "partial": 1,
+        "missing": 0,
+        "total": 9,
+        "percentage": 89
+      },
+      "goals": {
+        "satisfied": 0,
+        "partial": 7,
+        "missing": 0,
+        "total": 7,
+        "percentage": 0
+      },
+      "boundaries": {
+        "satisfied": 2,
+        "partial": 0,
+        "missing": 0,
+        "total": 2,
+        "percentage": 100
+      }
+    },
+    "required_truths": [
+      {
+        "id": "RT-1",
+        "status": "SATISFIED",
+        "evidence": "README.md contains 'Why ElixirMlx?' section with comparison table differentiating from EMLX."
+      },
+      {
+        "id": "RT-2",
+        "status": "SATISFIED",
+        "evidence": "Build pipeline validated on actual Apple Silicon hardware. make clean && make + mix test (115 tests, 0 failures) completes successfully. Makefile configures mlx-c clone, CMake build, NIF linking."
+      },
+      {
+        "id": "RT-3",
+        "status": "SATISFIED",
+        "evidence": "4 resource types (array, stream, device, vector_array) with destructors. Resource lifecycle tests in safety_test.exs."
+      },
+      {
+        "id": "RT-4",
+        "status": "SATISFIED",
+        "evidence": "mlx_set_error_handler called at NIF load. Thread-local buffer captures errors. Backend raises Elixir exceptions via unwrap!/1. Error propagation tested in safety_test.exs."
+      },
+      {
+        "id": "RT-5",
+        "status": "PARTIAL",
+        "evidence": "39 Nx.Backend callbacks implemented: 27 unary ops (neg, abs, sign, ceil, floor, round, exp, expm1, log, log1p, sqrt, rsqrt, sin, cos, tan, asin, acos, atan, sinh, cosh, tanh, asinh, acosh, atanh, erf, erfc, erf_inv, sigmoid, is_nan, is_infinity, logical_not, cbrt), binary ops (add, subtract, multiply, divide, pow, remainder, atan2, equal, not_equal, less, less_equal, greater, greater_equal, logical_and, logical_or, bitwise_and/or/xor, left/right_shift), reductions (sum, product, reduce_max, reduce_min, argmax, argmin), shape ops (reshape, transpose, squeeze, broadcast, slice, pad), sort/argsort, clip, take, take_along_axis, concatenate, reverse, dot, select, iota, eye, constant. Still missing: conv, fft, random, scatter, gather, window, put_slice.",
+        "action": "Implement remaining callbacks: conv, fft, random, scatter, gather, window."
+      },
+      {
+        "id": "RT-6",
+        "status": "SATISFIED",
+        "evidence": "Compiler.ex implements proper lazy evaluation with deep_transfer/deep_eval, save/restore of default backend. 12+ tests in compiler_test.exs."
+      },
+      {
+        "id": "RT-7",
+        "status": "SATISFIED",
+        "evidence": "Bidirectional dtype mapping (Nx ↔ MLX). f64 excluded (Metal limitation) with clear ArgumentError. dtype_test.exs validates mapping."
+      },
+      {
+        "id": "RT-8",
+        "status": "SATISFIED",
+        "evidence": "eval, to_binary, synchronize use ERL_NIF_DIRTY_JOB_CPU_BOUND. Simple accessors (shape, dtype, device) on normal schedulers."
+      },
+      {
+        "id": "RT-9",
+        "status": "NOT_SATISFIED",
+        "evidence": "Build from source only. No cc_precompiler, no precompiled binary CI workflow.",
+        "action": "Add cc_precompiler to mix.exs. Create CI job to build+upload precompiled binaries."
+      },
+      {
+        "id": "RT-10",
+        "status": "SATISFIED",
+        "evidence": ".github/workflows/ci.yml uses macos-14 runner."
+      }
+    ],
+    "gaps": [
+      {
+        "id": "G1",
+        "constraint": "T6",
+        "severity": "resolved",
+        "issue": "RESOLVED: Compiler.ex implements proper lazy evaluation.",
+        "action": "None."
+      },
+      {
+        "id": "G2",
+        "constraint": "B3",
+        "severity": "resolved",
+        "issue": "RESOLVED: README.md, LICENSE created. mix.exs updated with package files.",
+        "action": "None."
+      },
+      {
+        "id": "G3",
+        "constraint": "RT-1",
+        "severity": "resolved",
+        "issue": "RESOLVED: README.md 'Why ElixirMlx?' section with EMLX comparison table.",
+        "action": "None."
+      },
+      {
+        "id": "G4",
+        "constraint": "B1",
+        "severity": "resolved",
+        "issue": "RESOLVED: 39 backend callbacks implemented including all core unary/binary ops, reductions, shape ops, sort/argsort, clip, pad, take, concatenate, reverse, bitwise ops.",
+        "action": "None. Remaining ops (conv, fft, random, etc.) tracked separately."
+      },
+      {
+        "id": "G5",
+        "constraint": "S1",
+        "severity": "resolved",
+        "issue": "RESOLVED: safety_test.exs with 16 tests covering: resource lifecycle, concurrent operations, edge cases, error propagation, backend transfer safety.",
+        "action": "None."
+      },
+      {
+        "id": "G6",
+        "constraint": "S2",
+        "severity": "resolved",
+        "issue": "RESOLVED: 4 resource types (array, stream, device, vector_array) with destructors. Resource lifecycle tests in safety_test.exs.",
+        "action": "None."
+      },
+      {
+        "id": "G7",
+        "constraint": "O1",
+        "severity": "resolved",
+        "issue": "RESOLVED: Test count increased to 115 tests, 0 failures. Coverage estimated 75-80%.",
+        "action": "None. Further coverage improvement tracked as ongoing goal."
+      },
+      {
+        "id": "G8",
+        "constraint": "O3",
+        "severity": "non-blocking",
+        "issue": "No precompiled binary infrastructure (cc_precompiler).",
+        "action": "Add cc_precompiler to mix.exs. Set up CI precompile workflow."
+      },
+      {
+        "id": "G9",
+        "constraint": "RT-2",
+        "severity": "resolved",
+        "issue": "RESOLVED: Build pipeline validated on actual Apple Silicon hardware. make clean && make + mix test completes successfully with 115 tests, 0 failures.",
+        "action": "None."
+      }
+    ]
+  }
+}

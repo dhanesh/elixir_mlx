@@ -1,0 +1,47 @@
+# CI for elixir_mlx
+# Satisfies: O1 (CI pipeline), O3 (macOS Apple Silicon only)
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test (macOS Apple Silicon)
+    runs-on: macos-14  # M1 runner
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Erlang/OTP and Elixir
+        run: |
+          brew install erlang elixir
+          mix local.hex --force
+          mix local.rebar --force
+
+      - name: Cache deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+            c_src/mlx-c
+          key: ${{ runner.os }}-mix-${{ hashFiles('mix.lock') }}-mlx
+          restore-keys: |
+            ${{ runner.os }}-mix-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Compile (warnings as errors)
+        run: mix compile --warnings-as-errors
+
+      - name: Run tests
+        run: mix test
+
+      - name: Check formatting
+        run: mix format --check-formatted

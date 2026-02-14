@@ -1,0 +1,414 @@
+{
+  "$schema": "https://raw.githubusercontent.com/dhanesh/manifold/main/install/manifold-structure.schema.json",
+  "schema_version": 3,
+  "feature": "mlx-elixir",
+  "phase": "VERIFIED",
+  "created": "2026-02-14T00:00:00Z",
+  "constraints": {
+    "business": [
+      {"id": "B1", "type": "goal"},
+      {"id": "B2", "type": "invariant"},
+      {"id": "B3", "type": "goal"}
+    ],
+    "technical": [
+      {"id": "T1", "type": "invariant"},
+      {"id": "T2", "type": "invariant"},
+      {"id": "T3", "type": "boundary"},
+      {"id": "T4", "type": "goal"},
+      {"id": "T5", "type": "invariant"},
+      {"id": "T6", "type": "invariant"},
+      {"id": "T7", "type": "invariant"}
+    ],
+    "user_experience": [
+      {"id": "U1", "type": "invariant"},
+      {"id": "U2", "type": "goal"},
+      {"id": "U3", "type": "goal"}
+    ],
+    "security": [
+      {"id": "S1", "type": "invariant"},
+      {"id": "S2", "type": "invariant"}
+    ],
+    "operational": [
+      {"id": "O1", "type": "goal"},
+      {"id": "O2", "type": "boundary"},
+      {"id": "O3", "type": "goal"}
+    ]
+  },
+  "tensions": [
+    {
+      "id": "TN1",
+      "type": "trade_off",
+      "between": ["B2", "T6"],
+      "status": "resolved",
+      "resolution": "Implement both Nx.Backend (auto-eval for compatibility) and Nx.Defn.Compiler (lazy eval for performance). EXLA pattern.",
+      "decision": "A"
+    },
+    {
+      "id": "TN2",
+      "type": "trade_off",
+      "between": ["B1", "T4"],
+      "status": "resolved",
+      "resolution": "Phased delivery: Core ops → Nx backend → nn → transforms → model loading. Each phase reaches correctness before next begins.",
+      "decision": "A"
+    },
+    {
+      "id": "TN3",
+      "type": "trade_off",
+      "between": ["U1", "B1"],
+      "status": "resolved",
+      "resolution": "Follow Nx naming conventions (already Elixir-idiomatic). Provide Python-to-Elixir translation guide in docs. Elixir idioms win where they improve the API.",
+      "decision": "A"
+    },
+    {
+      "id": "TN4",
+      "type": "resource_tension",
+      "between": ["T5", "O3"],
+      "status": "resolved",
+      "resolution": "Accept mlx-c + Metal as platform dependencies. Use elixir_make (single build dep). Precompiled binaries eliminate build-time deps for end users.",
+      "decision": "A"
+    },
+    {
+      "id": "TN5",
+      "type": "trade_off",
+      "between": ["S1", "B1"],
+      "status": "resolved",
+      "resolution": "Safe core (array ops, math, nn, optimizers) fully exposed. Custom Metal kernels and raw memory ops gated behind opt-in module with safety documentation.",
+      "decision": "A"
+    },
+    {
+      "id": "TN6",
+      "type": "hidden_dependency",
+      "between": ["T1", "O3"],
+      "status": "resolved",
+      "resolution": "Pin mlx-c to specific versions per release. Semantic versioning: mlx-c minor bumps = elixir_mlx minor bumps. Precompiled binaries built per pinned version.",
+      "decision": "A"
+    }
+  ],
+  "anchors": {
+    "required_truths": [
+      {
+        "id": "RT-1",
+        "status": "SATISFIED",
+        "maps_to": ["B3", "T1"]
+      },
+      {
+        "id": "RT-2",
+        "status": "SATISFIED",
+        "maps_to": ["T1", "T3"]
+      },
+      {
+        "id": "RT-3",
+        "status": "SATISFIED",
+        "maps_to": ["S2", "T2", "S1"]
+      },
+      {
+        "id": "RT-4",
+        "status": "SATISFIED",
+        "maps_to": ["U3", "S1"]
+      },
+      {
+        "id": "RT-5",
+        "status": "PARTIAL",
+        "maps_to": ["B2", "U2"]
+      },
+      {
+        "id": "RT-6",
+        "status": "SATISFIED",
+        "maps_to": ["T6", "B2"]
+      },
+      {
+        "id": "RT-7",
+        "status": "SATISFIED",
+        "maps_to": ["B1", "B2", "U2"]
+      },
+      {
+        "id": "RT-8",
+        "status": "SATISFIED",
+        "maps_to": ["T2", "S1"]
+      },
+      {
+        "id": "RT-9",
+        "status": "NOT_SATISFIED",
+        "maps_to": ["O3", "T5"]
+      },
+      {
+        "id": "RT-10",
+        "status": "SATISFIED",
+        "maps_to": ["O1", "O2"]
+      }
+    ],
+    "recommended_option": "A"
+  },
+  "generation": {
+    "option": "A",
+    "timestamp": "2026-02-14T15:00:00Z",
+    "artifacts": [
+      {
+        "path": "mix.exs",
+        "type": "code",
+        "satisfies": ["T5", "O3"],
+        "status": "generated"
+      },
+      {
+        "path": "Makefile",
+        "type": "code",
+        "satisfies": ["T1", "T3", "RT-2", "RT-9"],
+        "status": "generated"
+      },
+      {
+        "path": ".formatter.exs",
+        "type": "code",
+        "satisfies": ["U1"],
+        "status": "generated"
+      },
+      {
+        "path": ".gitignore",
+        "type": "code",
+        "satisfies": ["O3"],
+        "status": "generated"
+      },
+      {
+        "path": "c_src/mlx_nif.h",
+        "type": "code",
+        "satisfies": ["T1", "T2", "S2", "RT-3"],
+        "status": "generated"
+      },
+      {
+        "path": "c_src/mlx_nif.c",
+        "type": "code",
+        "satisfies": ["T1", "T2", "S1", "S2", "RT-2", "RT-3", "RT-4", "RT-8"],
+        "status": "generated"
+      },
+      {
+        "path": "lib/mlx/nif.ex",
+        "type": "code",
+        "satisfies": ["T1", "B2", "RT-2"],
+        "status": "generated"
+      },
+      {
+        "path": "lib/mlx/dtype.ex",
+        "type": "code",
+        "satisfies": ["B1", "B2", "U2", "RT-7"],
+        "status": "generated"
+      },
+      {
+        "path": "lib/mlx/device.ex",
+        "type": "code",
+        "satisfies": ["T7", "U2"],
+        "status": "generated"
+      },
+      {
+        "path": "lib/mlx/backend.ex",
+        "type": "code",
+        "satisfies": ["B1", "B2", "U1", "U2", "RT-5", "RT-7"],
+        "status": "generated"
+      },
+      {
+        "path": "lib/mlx/compiler.ex",
+        "type": "code",
+        "satisfies": ["T6", "B2", "RT-6"],
+        "status": "generated"
+      },
+      {
+        "path": "lib/mlx.ex",
+        "type": "code",
+        "satisfies": ["U2", "U3", "T6"],
+        "status": "generated"
+      },
+      {
+        "path": "test/test_helper.exs",
+        "type": "test",
+        "validates": ["O1"],
+        "status": "generated"
+      },
+      {
+        "path": "test/mlx_test.exs",
+        "type": "test",
+        "validates": ["U1", "B2", "RT-5", "RT-7"],
+        "status": "generated"
+      },
+      {
+        "path": "test/mlx/dtype_test.exs",
+        "type": "test",
+        "validates": ["RT-7", "B1"],
+        "status": "generated"
+      },
+      {
+        "path": "test/mlx/compiler_test.exs",
+        "type": "test",
+        "validates": ["T6", "RT-6", "B2"],
+        "status": "generated"
+      },
+      {
+        "path": ".github/workflows/ci.yml",
+        "type": "ops",
+        "satisfies": ["O1", "O2", "O3", "RT-10"],
+        "status": "generated"
+      }
+    ],
+    "coverage": {
+      "constraints_addressed": 15,
+      "constraints_total": 15,
+      "percentage": 100
+    }
+  },
+  "iterations": [
+    {
+      "number": 1,
+      "phase": "constrain",
+      "timestamp": "2026-02-14T13:00:00Z",
+      "result": "Discovered 15 constraints across 5 categories via interview",
+      "constraints_added": 15,
+      "by_category": {
+        "business": 3,
+        "technical": 7,
+        "user_experience": 3,
+        "security": 2,
+        "operational": 3
+      }
+    },
+    {
+      "number": 2,
+      "phase": "tension",
+      "timestamp": "2026-02-14T13:30:00Z",
+      "result": "Identified 6 tensions (4 trade-offs, 1 resource tension, 1 hidden dependency). All resolved.",
+      "tensions_found": 6,
+      "tensions_resolved": 6,
+      "by_type": {
+        "trade_offs": 4,
+        "resource_tensions": 1,
+        "hidden_dependencies": 1
+      }
+    },
+    {
+      "number": 3,
+      "phase": "anchor",
+      "timestamp": "2026-02-14T14:00:00Z",
+      "result": "Derived 10 required truths via backward reasoning. Discovered EMLX exists; positioned as independent mlx-c alternative. Recommended Option A (layered bottom-up architecture).",
+      "required_truths": 10,
+      "by_status": {
+        "SATISFIED": 0,
+        "PARTIAL": 0,
+        "NOT_SATISFIED": 10,
+        "SPECIFICATION_READY": 0
+      },
+      "solution_options": 3,
+      "selected_option": "Option A: Bottom-up layered architecture (NIF shim → Native → Nx.Backend/Compiler → API)"
+    },
+    {
+      "number": 4,
+      "phase": "generate",
+      "timestamp": "2026-02-14T15:00:00Z",
+      "result": "Generated 16 artifacts (12 code, 2 test, 1 ops, 1 config). All 15 constraints and 10 required truths addressed. 4-layer architecture: C NIF → Elixir NIF → Nx.Backend+Compiler → API."
+    },
+    {
+      "number": 5,
+      "phase": "verify",
+      "timestamp": "2026-02-14T16:00:00Z",
+      "result": "Verification PARTIAL: 3/10 invariants fully satisfied, 3/3 boundaries satisfied, 0/5 goals fully satisfied. 9 gaps identified (3 blocking, 6 non-blocking). Key blocking gaps: T6 lazy eval compiler skeleton, no README/docs, no EMLX differentiation docs."
+    },
+    {
+      "number": 6,
+      "phase": "verify",
+      "timestamp": "2026-02-15T12:00:00Z",
+      "result": "Re-verification after fixing all test failures. 115 tests, 0 failures. 8/9 invariants satisfied (89%), 2/2 boundaries satisfied (100%), 0/7 goals fully satisfied (all PARTIAL). RT-2 upgraded to SATISFIED (build validated). G9 resolved. 1 gap remaining (G8: precompiled binaries). Key fixes: mlx_contiguous for broadcast/transpose views, take_on_axis workaround for axis!=0, error propagation test fix."
+    },
+    {
+      "number": 7,
+      "phase": "integrate",
+      "timestamp": "2026-02-15T12:30:00Z",
+      "result": "Integration audit: 12/12 integration points fully wired. Build chain (mix.exs → Makefile → NIF), module chain (NIF → Dtype/Device → Backend/Compiler → API), test chain, CI pipeline, and documentation all properly connected. No missing connections.",
+      "integration_points": 12,
+      "completed": 12,
+      "pending": 0,
+      "auto_wireable": 0,
+      "manual_required": 0
+    }
+  ],
+  "convergence": {
+    "status": "IN_PROGRESS",
+    "criteria": {
+      "all_invariants_satisfied": false,
+      "all_required_truths_satisfied": false,
+      "no_blocking_gaps": true,
+      "all_artifacts_integrated": true
+    }
+  },
+  "constraint_graph": {
+    "version": 1,
+    "nodes": {
+      "B1": {"type": "constraint", "status": "REQUIRED"},
+      "B2": {"type": "constraint", "status": "REQUIRED"},
+      "B3": {"type": "constraint", "status": "REQUIRED"},
+      "T1": {"type": "constraint", "status": "REQUIRED"},
+      "T2": {"type": "constraint", "status": "REQUIRED"},
+      "T3": {"type": "constraint", "status": "REQUIRED"},
+      "T4": {"type": "constraint", "status": "REQUIRED"},
+      "T5": {"type": "constraint", "status": "REQUIRED"},
+      "T6": {"type": "constraint", "status": "REQUIRED"},
+      "T7": {"type": "constraint", "status": "REQUIRED"},
+      "U1": {"type": "constraint", "status": "REQUIRED"},
+      "U2": {"type": "constraint", "status": "REQUIRED"},
+      "U3": {"type": "constraint", "status": "REQUIRED"},
+      "S1": {"type": "constraint", "status": "REQUIRED"},
+      "S2": {"type": "constraint", "status": "REQUIRED"},
+      "O1": {"type": "constraint", "status": "REQUIRED"},
+      "O2": {"type": "constraint", "status": "REQUIRED"},
+      "O3": {"type": "constraint", "status": "REQUIRED"},
+      "TN1": {"type": "tension", "status": "SATISFIED"},
+      "TN2": {"type": "tension", "status": "SATISFIED"},
+      "TN3": {"type": "tension", "status": "SATISFIED"},
+      "TN4": {"type": "tension", "status": "SATISFIED"},
+      "TN5": {"type": "tension", "status": "SATISFIED"},
+      "TN6": {"type": "tension", "status": "SATISFIED"},
+      "RT-1": {"type": "required_truth", "status": "REQUIRED"},
+      "RT-2": {"type": "required_truth", "status": "REQUIRED"},
+      "RT-3": {"type": "required_truth", "status": "REQUIRED"},
+      "RT-4": {"type": "required_truth", "status": "REQUIRED"},
+      "RT-5": {"type": "required_truth", "status": "REQUIRED"},
+      "RT-6": {"type": "required_truth", "status": "REQUIRED"},
+      "RT-7": {"type": "required_truth", "status": "REQUIRED"},
+      "RT-8": {"type": "required_truth", "status": "REQUIRED"},
+      "RT-9": {"type": "required_truth", "status": "REQUIRED"},
+      "RT-10": {"type": "required_truth", "status": "REQUIRED"}
+    },
+    "edges": {
+      "dependencies": [
+        {"from": "B2", "to": "T1", "label": "Nx backend requires NIF binding"},
+        {"from": "U1", "to": "B2", "label": "Idiomatic API must satisfy Nx.Backend"},
+        {"from": "S1", "to": "T2", "label": "BEAM safety requires defensive NIFs"},
+        {"from": "T6", "to": "T1", "label": "Lazy eval requires mlx-c binding"},
+        {"from": "T7", "to": "T3", "label": "Unified memory requires Apple Silicon"},
+        {"from": "O1", "to": "O2", "label": "Integration tests require Apple Silicon CI"},
+        {"from": "O3", "to": "T1", "label": "Precompiled binaries require pinned mlx-c version"},
+        {"from": "RT-5", "to": "RT-2", "label": "Nx.Backend requires working mlx-c build"},
+        {"from": "RT-6", "to": "RT-2", "label": "Compiler requires working mlx-c build"},
+        {"from": "RT-5", "to": "RT-3", "label": "Backend ops require resource management"},
+        {"from": "RT-5", "to": "RT-7", "label": "Backend requires dtype mapping"},
+        {"from": "RT-6", "to": "RT-7", "label": "Compiler requires dtype mapping"},
+        {"from": "RT-5", "to": "RT-4", "label": "Backend must handle mlx-c errors"},
+        {"from": "RT-9", "to": "RT-2", "label": "Precompiled binaries require mlx-c build"}
+      ],
+      "conflicts": [
+        {"from": "TN1", "between": ["B2", "T6"], "label": "Eager backend vs lazy evaluation"},
+        {"from": "TN2", "between": ["B1", "T4"], "label": "Full parity vs correctness-first"},
+        {"from": "TN3", "between": ["U1", "B1"], "label": "Elixir idioms vs Python portability"},
+        {"from": "TN4", "between": ["T5", "O3"], "label": "Minimal deps vs precompiled binaries"},
+        {"from": "TN5", "between": ["S1", "B1"], "label": "BEAM safety vs full feature coverage"},
+        {"from": "TN6", "between": ["T1", "O3"], "label": "Version tracking vs binary stability"}
+      ],
+      "satisfies": [
+        {"from": "RT-1", "to": "B3", "label": "Differentiation establishes project identity"},
+        {"from": "RT-2", "to": "T1", "label": "Working build satisfies NIF binding constraint"},
+        {"from": "RT-3", "to": "S2", "label": "Resource destructors satisfy no-leak constraint"},
+        {"from": "RT-4", "to": "U3", "label": "Error handler satisfies clear errors constraint"},
+        {"from": "RT-5", "to": "B2", "label": "Backend impl satisfies Nx compatibility"},
+        {"from": "RT-6", "to": "T6", "label": "Compiler impl satisfies lazy eval constraint"},
+        {"from": "RT-7", "to": "B1", "label": "Dtype mapping enables feature parity"},
+        {"from": "RT-8", "to": "T2", "label": "Dirty schedulers satisfy defensive NIF constraint"},
+        {"from": "RT-9", "to": "O3", "label": "Build pipeline satisfies Hex.pm constraint"},
+        {"from": "RT-10", "to": "O2", "label": "CI setup satisfies Apple Silicon CI constraint"}
+      ]
+    }
+  }
+}

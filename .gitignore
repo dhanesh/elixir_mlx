@@ -1,0 +1,17 @@
+/_build/
+/deps/
+/doc/
+*.ez
+*.beam
+*.plt
+*.o
+*.so
+*.dylib
+/priv/
+erl_crash.dump
+.elixir_ls/
+.DS_Store
+
+# mlx-c build artifacts
+/mlx-c/
+/c_src/mlx-c/
