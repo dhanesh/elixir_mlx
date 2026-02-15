@@ -26,6 +26,9 @@ defmodule ElixirMlx.MixProject do
         }
       ],
       start_permanent: Mix.env() == :prod,
+      test_coverage: [
+        ignore_modules: [Mlx.NIF]
+      ],
       deps: deps(),
       name: "ElixirMlx",
       description: description(),
@@ -64,14 +67,14 @@ defmodule ElixirMlx.MixProject do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url},
-      files: ~w(lib c_src mix.exs Makefile README.md LICENSE checksum-elixir_mlx.exs)
+      files: ~w(lib c_src mix.exs Makefile README.md CHANGELOG.md LICENSE checksum-elixir_mlx.exs)
     ]
   end
 
   defp docs do
     [
       main: "Mlx",
-      extras: ["README.md"]
+      extras: ["README.md", "CHANGELOG.md"]
     ]
   end
 end

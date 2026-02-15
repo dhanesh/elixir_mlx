@@ -18,3 +18,9 @@ erl_crash.dump
 
 # Precompiled NIF checksums (generated during release)
 /checksum-*.exs
+
+# Coverage reports
+/cover/
+
+# Serena MCP state
+.serena/

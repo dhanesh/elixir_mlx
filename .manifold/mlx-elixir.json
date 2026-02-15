@@ -353,6 +353,18 @@
       "phase": "verify",
       "timestamp": "2026-02-16T12:00:00Z",
       "result": "Post-Wave 1-8 re-verification. Full mlx-c API parity plan complete. 253 tests, 0 failures (up from 177). 130+ NIFs (up from 90+). 66 working Nx.Backend callbacks (up from 59). 6 new domain modules: Mlx.Random, Mlx.Linalg, Mlx.FFT, Mlx.Fast, Mlx.Quantize, Mlx.IO. Window ops (sum/max/min/product) implemented via as_strided+reduction. 9/9 invariants satisfied (100%), 2/2 boundaries satisfied (100%), 0/6 goals fully satisfied (all PARTIAL — docs/ecosystem gaps only). RT-5 advanced from 83% to 93% callback coverage. G10 resolved (window ops done, remaining 8 ops permanently unsupported). 3 non-blocking gaps remain (G11: 8 wontfix ops, G12: Hex publish, G13: ecosystem integration tests)."
+    },
+    {
+      "number": 12,
+      "phase": "verify",
+      "timestamp": "2026-02-16T14:00:00Z",
+      "result": "G11/G12/G13 resolved. 319 tests, 0 failures. 72 working Nx.Backend callbacks (66 native + 6 BinaryBackend fallback). 9/9 invariants (100%), 2/2 boundaries (100%), 3/6 goals SATISFIED, 3/6 PARTIAL (B1, T4, U3, O3). All remaining gaps are non-blocking stretch goals."
+    },
+    {
+      "number": 13,
+      "phase": "verify",
+      "timestamp": "2026-02-16T18:00:00Z",
+      "result": "Post mlx-c v0.5.0 upgrade verification. Upgraded from v0.1.2 to v0.5.0 (~40 API renames, SDPA/quantize mode fixes). Metal thread safety: all ExUnit modules async:false, safety_test.exs parallel tests converted to sequential. 319 tests, 0 failures. No regressions. 9/9 invariants (100%), 2/2 boundaries (100%), 3/6 goals SATISFIED, 3/6 PARTIAL. B1 gap note updated: mlx_func in v0.5.0 unblocks nn/transforms for future work."
     }
   ],
   "convergence": {

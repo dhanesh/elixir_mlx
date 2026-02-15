@@ -1,5 +1,5 @@
 defmodule Mlx.FastTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   setup do
     Nx.default_backend(Mlx.Backend)

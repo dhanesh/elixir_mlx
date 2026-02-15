@@ -1,5 +1,5 @@
 defmodule Mlx.CompilerTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   import Nx.Defn
 

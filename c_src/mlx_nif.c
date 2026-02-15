@@ -620,16 +620,16 @@ DEF_BINARY_OP(nif_kron,         mlx_kron)
 // NIF: Reduction operations (arr, axes|nil, keepdims, stream)
 // ============================================================
 
-DEF_REDUCE_OP(nif_sum,  mlx_sum_all,  mlx_sum)
-DEF_REDUCE_OP(nif_prod, mlx_prod_all, mlx_prod)
-DEF_REDUCE_OP(nif_mean, mlx_mean_all, mlx_mean)
-DEF_REDUCE_OP(nif_min,  mlx_min_all,  mlx_min)
-DEF_REDUCE_OP(nif_max,  mlx_max_all,  mlx_max)
-DEF_REDUCE_OP(nif_all_op, mlx_all_all, mlx_all_axes)
-DEF_REDUCE_OP(nif_any_op, mlx_any_all, mlx_any)
+DEF_REDUCE_OP(nif_sum,  mlx_sum,  mlx_sum_axes)
+DEF_REDUCE_OP(nif_prod, mlx_prod, mlx_prod_axes)
+DEF_REDUCE_OP(nif_mean, mlx_mean, mlx_mean_axes)
+DEF_REDUCE_OP(nif_min,  mlx_min,  mlx_min_axes)
+DEF_REDUCE_OP(nif_max,  mlx_max,  mlx_max_axes)
+DEF_REDUCE_OP(nif_all_op, mlx_all, mlx_all_axes)
+DEF_REDUCE_OP(nif_any_op, mlx_any, mlx_any_axes)
 
 // Wave 1: logsumexp reduction
-DEF_REDUCE_OP(nif_logsumexp, mlx_logsumexp_all, mlx_logsumexp)
+DEF_REDUCE_OP(nif_logsumexp, mlx_logsumexp, mlx_logsumexp_axes)
 
 // Wave 1: Cumulative ops macro
 // cumulative(arr, axis, reverse_bool, inclusive_bool, stream) -> {:ok, arr}
@@ -682,8 +682,8 @@ static ERL_NIF_TERM nif_name(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]
     return wrap_array(env, _r);                                                \
 }
 
-DEF_REDUCE_DDOF_OP(nif_std, mlx_std_all, mlx_std)
-DEF_REDUCE_DDOF_OP(nif_var, mlx_var_all, mlx_var)
+DEF_REDUCE_DDOF_OP(nif_std, mlx_std, mlx_std_axes)
+DEF_REDUCE_DDOF_OP(nif_var, mlx_var, mlx_var_axes)
 
 // argmax(arr, axis, keepdims, stream) -> {:ok, arr}
 static ERL_NIF_TERM nif_argmax(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
@@ -703,7 +703,7 @@ static ERL_NIF_TERM nif_argmax(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
         return MLX_NIF_ERROR(env, "expected stream");
 
     mlx_array result = mlx_array_new();
-    int ret = mlx_argmax(&result, a->inner, axis, keepdims, s->inner);
+    int ret = mlx_argmax_axis(&result, a->inner, axis, keepdims, s->inner);
     if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
     return wrap_array(env, result);
 }
@@ -726,7 +726,7 @@ static ERL_NIF_TERM nif_argmin(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
         return MLX_NIF_ERROR(env, "expected stream");
 
     mlx_array result = mlx_array_new();
-    int ret = mlx_argmin(&result, a->inner, axis, keepdims, s->inner);
+    int ret = mlx_argmin_axis(&result, a->inner, axis, keepdims, s->inner);
     if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
     return wrap_array(env, result);
 }
@@ -771,12 +771,12 @@ static ERL_NIF_TERM nif_transpose(ErlNifEnv* env, int argc, const ERL_NIF_TERM a
     int ret;
 
     if (enif_compare(argv[1], ATOM_NIL) == 0) {
-        ret = mlx_transpose_all(&result, a->inner, s->inner);
+        ret = mlx_transpose(&result, a->inner, s->inner);
     } else {
         int axes[16], nax;
         if (!get_int_list(env, argv[1], axes, &nax))
             return MLX_NIF_ERROR(env, "expected axes list");
-        ret = mlx_transpose(&result, a->inner, axes, (size_t)nax, s->inner);
+        ret = mlx_transpose_axes(&result, a->inner, axes, (size_t)nax, s->inner);
     }
 
     if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
@@ -798,12 +798,12 @@ static ERL_NIF_TERM nif_squeeze(ErlNifEnv* env, int argc, const ERL_NIF_TERM arg
     int ret;
 
     if (enif_compare(argv[1], ATOM_NIL) == 0) {
-        ret = mlx_squeeze_all(&result, a->inner, s->inner);
+        ret = mlx_squeeze(&result, a->inner, s->inner);
     } else {
         int axes[16], nax;
         if (!get_int_list(env, argv[1], axes, &nax))
             return MLX_NIF_ERROR(env, "expected axes list");
-        ret = mlx_squeeze(&result, a->inner, axes, (size_t)nax, s->inner);
+        ret = mlx_squeeze_axes(&result, a->inner, axes, (size_t)nax, s->inner);
     }
 
     if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
@@ -827,7 +827,7 @@ static ERL_NIF_TERM nif_expand_dims(ErlNifEnv* env, int argc, const ERL_NIF_TERM
 
     int axes_arr[1] = {axis};
     mlx_array result = mlx_array_new();
-    int ret = mlx_expand_dims(&result, a->inner, axes_arr, 1, s->inner);
+    int ret = mlx_expand_dims_axes(&result, a->inner, axes_arr, 1, s->inner);
     if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
     return wrap_array(env, result);
 }
@@ -989,7 +989,7 @@ static ERL_NIF_TERM nif_sort(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]
         return MLX_NIF_ERROR(env, "bad argument");
 
     mlx_array result = mlx_array_new();
-    int ret = mlx_sort(&result, a->inner, axis, s->inner);
+    int ret = mlx_sort_axis(&result, a->inner, axis, s->inner);
     if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
     return wrap_array(env, result);
 }
@@ -1006,7 +1006,7 @@ static ERL_NIF_TERM nif_argsort(ErlNifEnv* env, int argc, const ERL_NIF_TERM arg
         return MLX_NIF_ERROR(env, "bad argument");
 
     mlx_array result = mlx_array_new();
-    int ret = mlx_argsort(&result, a->inner, axis, s->inner);
+    int ret = mlx_argsort_axis(&result, a->inner, axis, s->inner);
     if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
     return wrap_array(env, result);
 }
@@ -1024,7 +1024,7 @@ static ERL_NIF_TERM nif_take(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]
         return MLX_NIF_ERROR(env, "bad argument");
 
     mlx_array result = mlx_array_new();
-    int ret = mlx_take(&result, a->inner, indices->inner, axis, s->inner);
+    int ret = mlx_take_axis(&result, a->inner, indices->inner, axis, s->inner);
     if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
     return wrap_array(env, result);
 }
@@ -1119,7 +1119,7 @@ static ERL_NIF_TERM nif_repeat(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
         return MLX_NIF_ERROR(env, "bad argument");
 
     mlx_array result = mlx_array_new();
-    int ret = mlx_repeat(&result, a->inner, repeats, axis, s->inner);
+    int ret = mlx_repeat_axis(&result, a->inner, repeats, axis, s->inner);
     if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
     return wrap_array(env, result);
 }
@@ -1182,7 +1182,7 @@ static ERL_NIF_TERM nif_concatenate(ErlNifEnv* env, int argc, const ERL_NIF_TERM
     }
 
     mlx_array result = mlx_array_new();
-    int ret = mlx_concatenate(&result, vec, axis, s->inner);
+    int ret = mlx_concatenate_axis(&result, vec, axis, s->inner);
     mlx_vector_array_free(vec);
     if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
     return wrap_array(env, result);
@@ -1226,7 +1226,7 @@ static ERL_NIF_TERM nif_stack(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[
     }
 
     mlx_array result = mlx_array_new();
-    int ret = mlx_stack(&result, vec, axis, s->inner);
+    int ret = mlx_stack_axis(&result, vec, axis, s->inner);
     mlx_vector_array_free(vec);
     if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
     return wrap_array(env, result);
@@ -1559,15 +1559,16 @@ static ERL_NIF_TERM nif_roll(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]
         !enif_get_int(env, argv[1], &shift) ||
         !enif_get_resource(env, argv[3], MLX_STREAM_RESOURCE, (void**)&s))
         return MLX_NIF_ERROR(env, "bad argument");
+    int shifts[1] = {shift};
     mlx_array result = mlx_array_new();
     int ret;
     if (enif_compare(argv[2], ATOM_NIL) == 0) {
-        ret = mlx_roll_all(&result, a->inner, shift, s->inner);
+        ret = mlx_roll(&result, a->inner, shifts, 1, s->inner);
     } else {
         int axes[16]; int nax;
         if (!get_int_list(env, argv[2], axes, &nax))
             return MLX_NIF_ERROR(env, "expected axes list");
-        ret = mlx_roll(&result, a->inner, shift, axes, (size_t)nax, s->inner);
+        ret = mlx_roll_axes(&result, a->inner, shifts, 1, axes, (size_t)nax, s->inner);
     }
     if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
     return wrap_array(env, result);
@@ -1674,7 +1675,7 @@ static ERL_NIF_TERM nif_topk(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]
         !enif_get_resource(env, argv[3], MLX_STREAM_RESOURCE, (void**)&s))
         return MLX_NIF_ERROR(env, "bad argument");
     mlx_array result = mlx_array_new();
-    int ret = mlx_topk(&result, a->inner, k, axis, s->inner);
+    int ret = mlx_topk_axis(&result, a->inner, k, axis, s->inner);
     if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
     return wrap_array(env, result);
 }
@@ -1690,7 +1691,7 @@ static ERL_NIF_TERM nif_partition(ErlNifEnv* env, int argc, const ERL_NIF_TERM a
         !enif_get_resource(env, argv[3], MLX_STREAM_RESOURCE, (void**)&s))
         return MLX_NIF_ERROR(env, "bad argument");
     mlx_array result = mlx_array_new();
-    int ret = mlx_partition(&result, a->inner, kth, axis, s->inner);
+    int ret = mlx_partition_axis(&result, a->inner, kth, axis, s->inner);
     if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
     return wrap_array(env, result);
 }
@@ -1706,7 +1707,7 @@ static ERL_NIF_TERM nif_argpartition(ErlNifEnv* env, int argc, const ERL_NIF_TER
         !enif_get_resource(env, argv[3], MLX_STREAM_RESOURCE, (void**)&s))
         return MLX_NIF_ERROR(env, "bad argument");
     mlx_array result = mlx_array_new();
-    int ret = mlx_argpartition(&result, a->inner, kth, axis, s->inner);
+    int ret = mlx_argpartition_axis(&result, a->inner, kth, axis, s->inner);
     if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
     return wrap_array(env, result);
 }
@@ -1839,12 +1840,12 @@ static ERL_NIF_TERM nif_softmax(ErlNifEnv* env, int argc, const ERL_NIF_TERM arg
     mlx_array result = mlx_array_new();
     int ret;
     if (enif_compare(argv[1], ATOM_NIL) == 0) {
-        ret = mlx_softmax_all(&result, a->inner, false, s->inner);
+        ret = mlx_softmax(&result, a->inner, false, s->inner);
     } else {
         int axes[16]; int nax;
         if (!get_int_list(env, argv[1], axes, &nax))
             return MLX_NIF_ERROR(env, "expected axes list");
-        ret = mlx_softmax(&result, a->inner, axes, (size_t)nax, false, s->inner);
+        ret = mlx_softmax_axes(&result, a->inner, axes, (size_t)nax, false, s->inner);
     }
     if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
     return wrap_array(env, result);
@@ -2088,7 +2089,7 @@ static ERL_NIF_TERM nif_split_equal_parts(ErlNifEnv* env, int argc, const ERL_NI
         return MLX_NIF_ERROR(env, "bad argument");
 
     mlx_vector_array parts = mlx_vector_array_new();
-    int ret = mlx_split_equal_parts(&parts, a->inner, num_splits, axis, s->inner);
+    int ret = mlx_split(&parts, a->inner, num_splits, axis, s->inner);
     if (ret != 0) {
         mlx_vector_array_free(parts);
         return MLX_NIF_ERROR(env, last_error_msg);
@@ -2551,7 +2552,7 @@ static ERL_NIF_TERM nif_linalg_svd(ErlNifEnv* env, int argc, const ERL_NIF_TERM 
         return MLX_NIF_ERROR(env, "bad argument");
 
     mlx_vector_array parts = mlx_vector_array_new();
-    int ret = mlx_linalg_svd(&parts, a->inner, s->inner);
+    int ret = mlx_linalg_svd(&parts, a->inner, true, s->inner);
     if (ret != 0) {
         mlx_vector_array_free(parts);
         return MLX_NIF_ERROR(env, last_error_msg);
@@ -2799,7 +2800,7 @@ static ERL_NIF_TERM nif_linalg_norm(ErlNifEnv* env, int argc, const ERL_NIF_TERM
         return MLX_NIF_ERROR(env, "expected stream");
 
     mlx_array result = mlx_array_new();
-    int ret = mlx_linalg_norm(&result, a->inner, axes_ptr, (size_t)naxes, keepdims, s->inner);
+    int ret = mlx_linalg_norm_l2(&result, a->inner, axes_ptr, (size_t)naxes, keepdims, s->inner);
     if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
     return wrap_array(env, result);
 }
@@ -2827,7 +2828,7 @@ static ERL_NIF_TERM nif_linalg_norm_p(ErlNifEnv* env, int argc, const ERL_NIF_TE
         return MLX_NIF_ERROR(env, "expected stream");
 
     mlx_array result = mlx_array_new();
-    int ret = mlx_linalg_norm_p(&result, a->inner, ord, axes_ptr, (size_t)naxes, keepdims, s->inner);
+    int ret = mlx_linalg_norm(&result, a->inner, ord, axes_ptr, (size_t)naxes, keepdims, s->inner);
     if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
     return wrap_array(env, result);
 }
@@ -2922,11 +2923,22 @@ static ERL_NIF_TERM nif_quantize(ErlNifEnv* env, int argc, const ERL_NIF_TERM ar
         !enif_get_resource(env, argv[3], MLX_STREAM_RESOURCE, (void**)&s))
         return MLX_NIF_ERROR(env, "bad argument");
 
-    mlx_array res0 = mlx_array_new();
-    mlx_array res1 = mlx_array_new();
-    mlx_array res2 = mlx_array_new();
-    int ret = mlx_quantize(&res0, &res1, &res2, w->inner, group_size, bits, s->inner);
-    if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
+    mlx_optional_int opt_group_size = {group_size, true};
+    mlx_optional_int opt_bits = {bits, true};
+
+    mlx_vector_array parts = mlx_vector_array_new();
+    int ret = mlx_quantize(&parts, w->inner, opt_group_size, opt_bits, "affine", s->inner);
+    if (ret != 0) {
+        mlx_vector_array_free(parts);
+        return MLX_NIF_ERROR(env, last_error_msg);
+    }
+
+    // Extract 3 arrays: quantized, scales, biases
+    mlx_array res0 = mlx_array_new(), res1 = mlx_array_new(), res2 = mlx_array_new();
+    mlx_vector_array_get(&res0, parts, 0);
+    mlx_vector_array_get(&res1, parts, 1);
+    mlx_vector_array_get(&res2, parts, 2);
+    mlx_vector_array_free(parts);
 
     ERL_NIF_TERM t0 = wrap_array_raw(env, res0);
     ERL_NIF_TERM t1 = wrap_array_raw(env, res1);
@@ -2948,8 +2960,13 @@ static ERL_NIF_TERM nif_dequantize(ErlNifEnv* env, int argc, const ERL_NIF_TERM 
         !enif_get_resource(env, argv[5], MLX_STREAM_RESOURCE, (void**)&s))
         return MLX_NIF_ERROR(env, "bad argument");
 
+    mlx_optional_int opt_group_size = {group_size, true};
+    mlx_optional_int opt_bits = {bits, true};
+    mlx_optional_dtype opt_dtype = {0, false};
+
     mlx_array result = mlx_array_new();
-    int ret = mlx_dequantize(&result, w->inner, scales->inner, biases->inner, group_size, bits, s->inner);
+    int ret = mlx_dequantize(&result, w->inner, scales->inner, biases->inner,
+                              opt_group_size, opt_bits, "affine", opt_dtype, s->inner);
     if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
     return wrap_array(env, result);
 }
@@ -2972,9 +2989,12 @@ static ERL_NIF_TERM nif_quantized_matmul(ErlNifEnv* env, int argc, const ERL_NIF
         return MLX_NIF_ERROR(env, "bad argument");
 
     bool transpose = (strcmp(transpose_str, "true") == 0);
+    mlx_optional_int opt_group_size = {group_size, true};
+    mlx_optional_int opt_bits = {bits, true};
+
     mlx_array result = mlx_array_new();
     int ret = mlx_quantized_matmul(&result, x->inner, w->inner, scales->inner, biases->inner,
-                                    transpose, group_size, bits, s->inner);
+                                    transpose, opt_group_size, opt_bits, "affine", s->inner);
     if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
     return wrap_array(env, result);
 }
@@ -3067,6 +3087,7 @@ static ERL_NIF_TERM nif_fast_rope(ErlNifEnv* env, int argc, const ERL_NIF_TERM a
 }
 
 // fast_scaled_dot_product_attention(q, k, v, scale, mask_or_nil, stream) -> {:ok, arr}
+// v0.5.0: added mask_mode string, sinks array; removed memory_efficient_threshold
 static ERL_NIF_TERM nif_fast_sdpa(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
     (void)argc;
     MlxArrayResource *q, *k, *v; MlxStreamResource *s;
@@ -3078,18 +3099,21 @@ static ERL_NIF_TERM nif_fast_sdpa(ErlNifEnv* env, int argc, const ERL_NIF_TERM a
         !enif_get_resource(env, argv[5], MLX_STREAM_RESOURCE, (void**)&s))
         return MLX_NIF_ERROR(env, "bad argument");
 
-    // mask may be :nil or array
-    mlx_array mask = mlx_array_new();
+    // mask may be :nil or array; determine mask_mode accordingly
+    mlx_array mask_arr = mlx_array_new();
+    const char *mask_mode = "";
     MlxArrayResource *m_res;
-    if (enif_get_resource(env, argv[4], MLX_ARRAY_RESOURCE, (void**)&m_res))
-        mask = m_res->inner;
+    if (enif_get_resource(env, argv[4], MLX_ARRAY_RESOURCE, (void**)&m_res)) {
+        mask_arr = m_res->inner;
+        mask_mode = "array";
+    }
 
-    mlx_optional_int mem_thresh;
-    mem_thresh.has_value = false;
+    // sinks not exposed yet — pass null array
+    mlx_array sinks = mlx_array_new();
 
     mlx_array result = mlx_array_new();
     int ret = mlx_fast_scaled_dot_product_attention(&result, q->inner, k->inner, v->inner,
-                                                     (float)scale_d, mask, mem_thresh, s->inner);
+                                                     (float)scale_d, mask_mode, mask_arr, sinks, s->inner);
     if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
     return wrap_array(env, result);
 }

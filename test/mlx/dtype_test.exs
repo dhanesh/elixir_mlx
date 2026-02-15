@@ -1,5 +1,5 @@
 defmodule Mlx.DtypeTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   # Validates: RT-7 (dtype mapping)
 
   describe "to_mlx/1" do

@@ -7,7 +7,7 @@ ERL_INTERFACE_INCLUDE_DIR ?= $(shell erl -noshell -eval "io:format(\"~ts\", [cod
 ERL_INTERFACE_LIB_DIR ?= $(shell erl -noshell -eval "io:format(\"~ts\", [code:lib_dir(erl_interface, lib)])." -s init stop)
 
 # mlx-c configuration
-MLX_C_VERSION ?= 0.1.2
+MLX_C_VERSION ?= 0.5.0
 MLX_C_DIR = c_src/mlx-c
 MLX_C_BUILD_DIR = $(MLX_C_DIR)/build
 MLX_C_INCLUDE_DIR = $(MLX_C_DIR)
