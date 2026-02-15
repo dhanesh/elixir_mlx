@@ -46,6 +46,10 @@ defmodule Mlx.Backend do
 
   defp s, do: default_stream()
 
+  # Convert a value to a plain integer — Nx 0.10 may pass scalar tensors
+  defp to_int(%Nx.Tensor{} = t), do: Nx.to_number(t)
+  defp to_int(i) when is_integer(i), do: i
+
   # CPU stream for linalg ops (many are CPU-only in MLX)
   @cpu_stream_key {__MODULE__, :cpu_stream}
   defp cpu_s do
@@ -237,11 +241,6 @@ defmodule Mlx.Backend do
     {:greater_equal, :mlx_greater_equal},
     {:logical_and, :mlx_logical_and},
     {:logical_or, :mlx_logical_or},
-    {:bitwise_and, :mlx_bitwise_and},
-    {:bitwise_or, :mlx_bitwise_or},
-    {:bitwise_xor, :mlx_bitwise_xor},
-    {:left_shift, :mlx_left_shift},
-    {:right_shift, :mlx_right_shift}
   ]
 
   for {nx_op, mlx_op} <- binary_ops do
@@ -249,6 +248,28 @@ defmodule Mlx.Backend do
     def unquote(nx_op)(out, left, right) do
       l = from_ref(left)
       r = from_ref(right)
+      result = unwrap!(apply(Mlx.NIF, unquote(mlx_op), [l, r, s()]))
+      to_nx(out, result)
+    end
+  end
+
+  # Bitwise ops need explicit type casting because MLX's type promotion
+  # can promote mixed integer types (e.g. u64 + s32) to float32, which
+  # bitwise ops reject. We cast both operands to the output type first.
+  @bitwise_ops [
+    {:bitwise_and, :mlx_bitwise_and},
+    {:bitwise_or, :mlx_bitwise_or},
+    {:bitwise_xor, :mlx_bitwise_xor},
+    {:left_shift, :mlx_left_shift},
+    {:right_shift, :mlx_right_shift}
+  ]
+
+  for {nx_op, mlx_op} <- @bitwise_ops do
+    @impl true
+    def unquote(nx_op)(%Nx.Tensor{type: out_type} = out, left, right) do
+      mlx_type = Mlx.Dtype.to_mlx(out_type)
+      l = unwrap!(Mlx.NIF.mlx_as_type(from_ref(left), mlx_type, s()))
+      r = unwrap!(Mlx.NIF.mlx_as_type(from_ref(right), mlx_type, s()))
       result = unwrap!(apply(Mlx.NIF, unquote(mlx_op), [l, r, s()]))
       to_nx(out, result)
     end
@@ -373,10 +394,13 @@ defmodule Mlx.Backend do
   def slice(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor, start_indices, lengths, strides) do
     ref = from_ref(tensor)
 
-    stop_indices =
-      Enum.zip_with(start_indices, lengths, fn start, len -> start + len end)
+    # Nx 0.10 may pass start_indices as Nx tensors — convert to integers
+    starts = Enum.map(start_indices, &to_int/1)
 
-    result = unwrap!(Mlx.NIF.mlx_slice(ref, start_indices, stop_indices, strides, s()))
+    stop_indices =
+      Enum.zip_with(starts, lengths, fn start, len -> start + len end)
+
+    result = unwrap!(Mlx.NIF.mlx_slice(ref, starts, stop_indices, strides, s()))
     to_nx(out, result)
   end
 
@@ -611,9 +635,30 @@ defmodule Mlx.Backend do
   end
 
   @impl true
-  def svd({%Nx.Tensor{} = u_out, %Nx.Tensor{} = s_out, %Nx.Tensor{} = vt_out}, %Nx.Tensor{} = tensor, _opts) do
+  def svd({%Nx.Tensor{} = u_out, %Nx.Tensor{} = s_out, %Nx.Tensor{} = vt_out}, %Nx.Tensor{} = tensor, opts) do
     ref = from_ref(tensor)
     [u_ref, s_ref, vt_ref] = unwrap!(Mlx.NIF.mlx_linalg_svd(ref, cpu_s()))
+
+    # mlx_linalg_svd always returns full SVD (U is m×m, Vt is n×n).
+    # When full_matrices?: false, Nx expects the reduced/economy form
+    # (U is m×k, Vt is k×n where k = min(m,n)). Slice to match.
+    {u_ref, vt_ref} =
+      if Keyword.get(opts, :full_matrices?, true) do
+        {u_ref, vt_ref}
+      else
+        u_starts = List.duplicate(0, tuple_size(u_out.shape))
+        u_stops = Tuple.to_list(u_out.shape)
+        u_strides = List.duplicate(1, tuple_size(u_out.shape))
+        u_sliced = unwrap!(Mlx.NIF.mlx_slice(u_ref, u_starts, u_stops, u_strides, s()))
+
+        vt_starts = List.duplicate(0, tuple_size(vt_out.shape))
+        vt_stops = Tuple.to_list(vt_out.shape)
+        vt_strides = List.duplicate(1, tuple_size(vt_out.shape))
+        vt_sliced = unwrap!(Mlx.NIF.mlx_slice(vt_ref, vt_starts, vt_stops, vt_strides, s()))
+
+        {u_sliced, vt_sliced}
+      end
+
     {to_nx(u_out, u_ref), to_nx(s_out, s_ref), to_nx(vt_out, vt_ref)}
   end
 
@@ -805,16 +850,19 @@ defmodule Mlx.Backend do
     ref = from_ref(tensor)
     slice_ref = from_ref(slice)
 
+    # Nx 0.10 may pass start_indices as Nx tensors — convert to integers
+    starts = Enum.map(start_indices, &to_int/1)
+
     # Compute stop indices from start + slice shape
     slice_shape = Tuple.to_list(slice.shape)
 
     stop_indices =
-      Enum.zip_with(start_indices, slice_shape, fn start, len -> start + len end)
+      Enum.zip_with(starts, slice_shape, fn start, len -> start + len end)
 
-    strides = List.duplicate(1, length(start_indices))
+    strides = List.duplicate(1, length(starts))
 
     result =
-      unwrap!(Mlx.NIF.mlx_slice_update(ref, slice_ref, start_indices, stop_indices, strides, s()))
+      unwrap!(Mlx.NIF.mlx_slice_update(ref, slice_ref, starts, stop_indices, strides, s()))
 
     to_nx(out, result)
   end
@@ -1090,6 +1138,16 @@ defmodule Mlx.Backend do
 
   # --- Private helpers ---
 
+  defp number_to_binary(number, type) when number in [:infinity, :neg_infinity, :nan] do
+    # Handle non-finite float constants (infinity, neg_infinity, nan)
+    case type do
+      {:f, size} -> Nx.Shared.write_non_finite(number, size)
+      {:bf, 16} -> Nx.Shared.write_non_finite_bf16(number)
+      {:c, 64} -> Nx.Shared.write_non_finite(number, 32) <> <<0.0::float-native-32>>
+      _ -> number_to_binary(0, type)
+    end
+  end
+
   defp number_to_binary(number, {type, size}) do
     # Encode a single number as binary in the given Nx type
     case {type, size} do
@@ -1172,25 +1230,61 @@ defmodule Mlx.Backend do
   # --- Not yet implemented callbacks ---
   # These raise clear errors instead of generating compiler warnings.
 
-  # Ops permanently unsupported (no mlx-c equivalent)
-  @unsupported_ops ~w(
-    count_leading_zeros from_pointer population_count reduce to_pointer
-  )a
+  # --- Bit operations (via BinaryBackend) ---
+  # No mlx-c equivalent; transfer data to BinaryBackend for computation.
 
-  for op <- @unsupported_ops do
-    arity =
-      case op do
-        op when op in [:to_pointer, :count_leading_zeros, :population_count] -> 2
-        op when op in [:from_pointer, :reduce] -> 5
-        _ -> 3
-      end
+  @impl true
+  def count_leading_zeros(out, tensor) do
+    with_binary_backend(fn ->
+      Nx.BinaryBackend.count_leading_zeros(
+        out,
+        Nx.backend_transfer(tensor, Nx.BinaryBackend)
+      )
+    end)
+  end
 
-    args = Macro.generate_arguments(arity, __MODULE__)
+  @impl true
+  def population_count(out, tensor) do
+    with_binary_backend(fn ->
+      Nx.BinaryBackend.population_count(
+        out,
+        Nx.backend_transfer(tensor, Nx.BinaryBackend)
+      )
+    end)
+  end
 
-    @impl true
-    def unquote(op)(unquote_splicing(args)) do
-      raise ArgumentError, "#{unquote(op)} is not supported by Mlx.Backend (no mlx-c equivalent)"
-    end
+  # --- General reduce (via BinaryBackend) ---
+  # Requires user-defined functions; mlx-c can't accept Elixir closures.
+
+  @impl true
+  def reduce(out, tensor, acc, opts, fun) do
+    with_binary_backend(fn ->
+      Nx.BinaryBackend.reduce(
+        out,
+        Nx.backend_transfer(tensor, Nx.BinaryBackend),
+        Nx.backend_transfer(acc, Nx.BinaryBackend),
+        opts,
+        fun
+      )
+    end)
+  end
+
+  # --- Pointer operations (not supported) ---
+  # MLX arrays are managed by the runtime; raw pointer access is not meaningful.
+  # Even Nx.BinaryBackend raises for these. Use Nx.from_binary/3 or Nx.to_binary/1 instead.
+
+  @impl true
+  def from_pointer(_arg1, _arg2, _arg3, _arg4, _arg5) do
+    raise ArgumentError,
+      "from_pointer is not supported by Mlx.Backend. " <>
+        "MLX arrays are managed by the MLX runtime. Use Nx.from_binary/3 instead."
+  end
+
+  @impl true
+  def to_pointer(_tensor, _opts) do
+    raise ArgumentError,
+      "to_pointer is not supported by Mlx.Backend. " <>
+        "MLX arrays are managed by the MLX runtime. Use Nx.to_binary/1 instead."
   end
 
   # Window ops — implemented via as_strided + reductions
@@ -1327,19 +1421,62 @@ defmodule Mlx.Backend do
     unwrap!(Mlx.NIF.from_binary(binary, [], Mlx.Dtype.to_mlx(type)))
   end
 
-  # Window ops that require user-defined functions — not supported in mlx-c
-  @window_custom_ops ~w(
-    window_reduce window_scatter_max window_scatter_min
-  )a
+  # --- Window ops with user-defined functions (via BinaryBackend) ---
+  # mlx-c can't accept Elixir closures; transfer data to BinaryBackend.
 
-  for op <- @window_custom_ops do
-    arity = 6
+  @impl true
+  def window_reduce(out, tensor, acc, window_dimensions, opts, fun) do
+    with_binary_backend(fn ->
+      Nx.BinaryBackend.window_reduce(
+        out,
+        Nx.backend_transfer(tensor, Nx.BinaryBackend),
+        Nx.backend_transfer(acc, Nx.BinaryBackend),
+        window_dimensions,
+        opts,
+        fun
+      )
+    end)
+  end
 
-    args = Macro.generate_arguments(arity, __MODULE__)
+  @impl true
+  def window_scatter_max(out, tensor, source, init_value, window_dimensions, opts) do
+    with_binary_backend(fn ->
+      Nx.BinaryBackend.window_scatter_max(
+        out,
+        Nx.backend_transfer(tensor, Nx.BinaryBackend),
+        Nx.backend_transfer(source, Nx.BinaryBackend),
+        Nx.backend_transfer(init_value, Nx.BinaryBackend),
+        window_dimensions,
+        opts
+      )
+    end)
+  end
 
-    @impl true
-    def unquote(op)(unquote_splicing(args)) do
-      raise ArgumentError, "#{unquote(op)} is not supported by Mlx.Backend (requires user-defined functions)"
+  @impl true
+  def window_scatter_min(out, tensor, source, init_value, window_dimensions, opts) do
+    with_binary_backend(fn ->
+      Nx.BinaryBackend.window_scatter_min(
+        out,
+        Nx.backend_transfer(tensor, Nx.BinaryBackend),
+        Nx.backend_transfer(source, Nx.BinaryBackend),
+        Nx.backend_transfer(init_value, Nx.BinaryBackend),
+        window_dimensions,
+        opts
+      )
+    end)
+  end
+
+  # Temporarily sets the default backend to BinaryBackend so that
+  # intermediate tensors created during BinaryBackend operations
+  # (e.g., inside user closures or internal Nx dispatch) stay on BinaryBackend.
+  defp with_binary_backend(fun) do
+    prev = Nx.default_backend()
+    Nx.default_backend({Nx.BinaryBackend, []})
+
+    try do
+      fun.()
+    after
+      Nx.default_backend(prev)
     end
   end
 end

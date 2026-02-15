@@ -41,43 +41,57 @@ defmodule Mlx.Compiler do
   @behaviour Nx.Defn.Compiler
 
   @impl true
-  def __jit__(key, vars, fun, args, opts) do
-    __compile__(key, vars, fun, opts).(args)
+  def __jit__(key, vars, fun, args_list, opts) do
+    __compile__(key, vars, fun, opts).(args_list)
   end
 
   @impl true
-  def __compile__(_key, _vars, fun, _opts) do
-    fn args ->
-      # Save current default backend so we can restore it
-      prev = Nx.default_backend()
+  def __compile__(key, vars, _fun, _opts) do
+    # The compiled function receives args_list: a list of flat thunk lists.
+    # Each thunk is a zero-arity function that returns an actual tensor.
+    # We bypass runtime_fun (which builds Expr trees) and instead:
+    # 1. Call thunks to get actual tensors
+    # 2. Transfer them to Mlx.Backend
+    # 3. Reconstruct the container structure using vars as template
+    # 4. Call the original function (key) directly with MLX-backed tensors
+    # 5. Batch-evaluate all outputs
+    fn args_list ->
+      Enum.map(args_list, fn arg_funs ->
+        prev = Nx.default_backend()
 
-      try do
-        # Set MLX as the default backend for this computation
-        Nx.default_backend(Mlx.Backend)
+        try do
+          Nx.default_backend(Mlx.Backend)
 
-        # Transfer all inputs to Mlx.Backend. If already on Mlx.Backend,
-        # this is a no-op. For tensors on other backends, this converts
-        # them to lazy MLX arrays.
-        mlx_args = deep_transfer(args)
+          # Call each thunk and transfer the resulting tensor to MLX
+          mlx_tensors =
+            Enum.map(arg_funs, fn thunk ->
+              transfer_one(thunk.())
+            end)
 
-        # Run the defn function. All Nx operations dispatch through
-        # Mlx.Backend, which calls lazy mlx-c operations. Each NIF call
-        # (mlx_add, mlx_matmul, etc.) returns immediately with a handle
-        # to a lazy array node in the computation graph. No Metal
-        # execution happens here.
-        result = fun.(mlx_args)
+          # Reconstruct container structure from flat tensor list.
+          # vars defines the nesting (maps, tuples, structs) while
+          # mlx_tensors is the flat list of actual MLX-backed tensors.
+          {mlx_args, []} =
+            Enum.map_reduce(vars, mlx_tensors, fn var, remaining ->
+              Nx.Defn.Composite.traverse(var, remaining, fn _expr, [tensor | rest] ->
+                {tensor, rest}
+              end)
+            end)
 
-        # Batch-evaluate all output tensors. This triggers MLX's graph
-        # evaluation — MLX traces from outputs backward through the
-        # computation graph and launches optimized Metal kernels.
-        # After this, all output tensors contain computed values.
-        deep_eval(result)
+          # Call the original function with MLX-backed tensors.
+          # All Nx operations dispatch through Mlx.Backend, building
+          # a lazy MLX computation graph without GPU execution.
+          result = apply(key, mlx_args)
 
-        result
-      after
-        # Always restore the previous default backend
-        Nx.default_backend(prev)
-      end
+          # Batch-evaluate all output tensors — triggers MLX's graph
+          # evaluation on Metal in one optimized pass.
+          deep_eval(result)
+
+          result
+        after
+          Nx.default_backend(prev)
+        end
+      end)
     end
   end
 
@@ -88,10 +102,6 @@ defmodule Mlx.Compiler do
   def __to_backend__(_opts), do: {Mlx.Backend, []}
 
   # --- Container traversal: transfer inputs to Mlx.Backend ---
-
-  defp deep_transfer(args) when is_list(args) do
-    Enum.map(args, &transfer_one/1)
-  end
 
   defp transfer_one(%Nx.Tensor{data: %Mlx.Backend{}} = tensor), do: tensor
 
