@@ -51,46 +51,46 @@ defmodule Mlx.CompilerTest do
 
     # f(x) = x^2, grad = 2x
     @defn_compiler Mlx.Compiler
-    defn square(x), do: Nx.pow(x, 2)
+    defn(square(x), do: Nx.pow(x, 2))
 
     @defn_compiler Mlx.Compiler
-    defn grad_square(x), do: grad(x, &square/1)
+    defn(grad_square(x), do: grad(x, &square/1))
 
     @defn_compiler Mlx.Compiler
-    defn value_and_grad_square(x), do: value_and_grad(x, &square/1)
+    defn(value_and_grad_square(x), do: value_and_grad(x, &square/1))
 
     # f(x) = x^3, grad = 3x^2
     @defn_compiler Mlx.Compiler
-    defn cube(x), do: Nx.pow(x, 3)
+    defn(cube(x), do: Nx.pow(x, 3))
 
     @defn_compiler Mlx.Compiler
-    defn grad_cube(x), do: grad(x, &cube/1)
+    defn(grad_cube(x), do: grad(x, &cube/1))
 
     # f(x, y) = x * y  (multi-variable)
     @defn_compiler Mlx.Compiler
-    defn product(x, y), do: Nx.multiply(x, y)
+    defn(product(x, y), do: Nx.multiply(x, y))
 
     @defn_compiler Mlx.Compiler
-    defn grad_product_x(x, y), do: grad(x, fn x_ -> product(x_, y) end)
+    defn(grad_product_x(x, y), do: grad(x, fn x_ -> product(x_, y) end))
 
     # sigmoid'(x) = sigmoid(x) * (1 - sigmoid(x))
     @defn_compiler Mlx.Compiler
-    defn grad_sigmoid(x), do: grad(x, &Nx.sigmoid/1)
+    defn(grad_sigmoid(x), do: grad(x, &Nx.sigmoid/1))
 
     # Gradient of sum: grad(sum(x)) = ones_like(x)
     @defn_compiler Mlx.Compiler
-    defn grad_sum(x), do: grad(x, &Nx.sum/1)
+    defn(grad_sum(x), do: grad(x, &Nx.sum/1))
 
     # Gradient with mean: grad(mean(x)) = 1/n for each element
     @defn_compiler Mlx.Compiler
-    defn grad_mean(x), do: grad(x, &Nx.mean/1)
+    defn(grad_mean(x), do: grad(x, &Nx.mean/1))
 
     # Composed function: f(x) = exp(x^2)
     @defn_compiler Mlx.Compiler
-    defn exp_square(x), do: Nx.exp(Nx.pow(x, 2))
+    defn(exp_square(x), do: Nx.exp(Nx.pow(x, 2)))
 
     @defn_compiler Mlx.Compiler
-    defn grad_exp_square(x), do: grad(x, &exp_square/1)
+    defn(grad_exp_square(x), do: grad(x, &exp_square/1))
 
     # Gradient with matmul: f(w) = sum(x . w)
     @defn_compiler Mlx.Compiler
@@ -99,14 +99,14 @@ defmodule Mlx.CompilerTest do
     end
 
     @defn_compiler Mlx.Compiler
-    defn grad_linear_w(x, w), do: grad(w, fn w_ -> linear_sum(x, w_) end)
+    defn(grad_linear_w(x, w), do: grad(w, fn w_ -> linear_sum(x, w_) end))
 
     # Gradient with select (conditional)
     @defn_compiler Mlx.Compiler
-    defn relu(x), do: Nx.max(x, 0)
+    defn(relu(x), do: Nx.max(x, 0))
 
     @defn_compiler Mlx.Compiler
-    defn grad_relu(x), do: grad(x, fn x_ -> Nx.sum(relu(x_)) end)
+    defn(grad_relu(x), do: grad(x, fn x_ -> Nx.sum(relu(x_)) end))
 
     # Second-order gradient: grad(grad(x^3)) = 6x
     @defn_compiler Mlx.Compiler
@@ -116,7 +116,7 @@ defmodule Mlx.CompilerTest do
 
     # JIT compilation (Nx.Defn.jit)
     @defn_compiler Mlx.Compiler
-    defn jit_add(a, b), do: Nx.add(a, b)
+    defn(jit_add(a, b), do: Nx.add(a, b))
 
     # Gradient with broadcasting: f(x) = sum(x + [1,2,3])
     @defn_compiler Mlx.Compiler

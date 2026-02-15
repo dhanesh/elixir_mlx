@@ -125,9 +125,21 @@ defmodule Mlx.CoverageTest do
 
   describe "Mlx.Dtype.supported?/1" do
     test "all supported types" do
-      for type <- [{:u, 8}, {:u, 16}, {:u, 32}, {:u, 64},
-                   {:s, 8}, {:s, 16}, {:s, 32}, {:s, 64},
-                   {:f, 16}, {:f, 32}, {:bf, 16}, {:c, 64}, {:pred, 8}] do
+      for type <- [
+            {:u, 8},
+            {:u, 16},
+            {:u, 32},
+            {:u, 64},
+            {:s, 8},
+            {:s, 16},
+            {:s, 32},
+            {:s, 64},
+            {:f, 16},
+            {:f, 32},
+            {:bf, 16},
+            {:c, 64},
+            {:pred, 8}
+          ] do
         assert Mlx.Dtype.supported?(type), "Expected #{inspect(type)} to be supported"
       end
     end
@@ -142,9 +154,13 @@ defmodule Mlx.CoverageTest do
 
   describe "Mlx.Compiler with map outputs" do
     test "defn returning a map" do
-      fun = Nx.Defn.jit(fn x ->
-        %{sum: Nx.sum(x), max: Nx.reduce_max(x)}
-      end, compiler: Mlx.Compiler)
+      fun =
+        Nx.Defn.jit(
+          fn x ->
+            %{sum: Nx.sum(x), max: Nx.reduce_max(x)}
+          end,
+          compiler: Mlx.Compiler
+        )
 
       result = fun.(Nx.tensor([1.0, 2.0, 3.0]))
       assert Nx.to_number(result.sum) == 6.0
@@ -154,9 +170,13 @@ defmodule Mlx.CoverageTest do
 
   describe "Mlx.Compiler with list outputs" do
     test "defn returning a list" do
-      fun = Nx.Defn.jit(fn x ->
-        [Nx.add(x, 1), Nx.multiply(x, 2)]
-      end, compiler: Mlx.Compiler)
+      fun =
+        Nx.Defn.jit(
+          fn x ->
+            [Nx.add(x, 1), Nx.multiply(x, 2)]
+          end,
+          compiler: Mlx.Compiler
+        )
 
       [a, b] = fun.(Nx.tensor([1.0, 2.0]))
       assert Nx.to_flat_list(a) == [2.0, 3.0]
@@ -166,9 +186,13 @@ defmodule Mlx.CoverageTest do
 
   describe "Mlx.Compiler with nested containers" do
     test "defn returning nested tuple/map" do
-      fun = Nx.Defn.jit(fn x ->
-        {Nx.sum(x), %{doubled: Nx.multiply(x, 2)}}
-      end, compiler: Mlx.Compiler)
+      fun =
+        Nx.Defn.jit(
+          fn x ->
+            {Nx.sum(x), %{doubled: Nx.multiply(x, 2)}}
+          end,
+          compiler: Mlx.Compiler
+        )
 
       {sum, map} = fun.(Nx.tensor([1.0, 2.0, 3.0]))
       assert Nx.to_number(sum) == 6.0
@@ -178,9 +202,13 @@ defmodule Mlx.CoverageTest do
 
   describe "Mlx.Compiler with scalar outputs" do
     test "defn returning scalar tensor" do
-      fun = Nx.Defn.jit(fn x ->
-        Nx.sum(x)
-      end, compiler: Mlx.Compiler)
+      fun =
+        Nx.Defn.jit(
+          fn x ->
+            Nx.sum(x)
+          end,
+          compiler: Mlx.Compiler
+        )
 
       result = fun.(Nx.tensor([10.0, 20.0, 30.0]))
       assert Nx.to_number(result) == 60.0
@@ -189,9 +217,13 @@ defmodule Mlx.CoverageTest do
 
   describe "Mlx.Compiler with non-tensor passthrough" do
     test "defn with integer operations" do
-      fun = Nx.Defn.jit(fn x ->
-        Nx.reshape(x, {2, 2})
-      end, compiler: Mlx.Compiler)
+      fun =
+        Nx.Defn.jit(
+          fn x ->
+            Nx.reshape(x, {2, 2})
+          end,
+          compiler: Mlx.Compiler
+        )
 
       result = fun.(Nx.tensor([1.0, 2.0, 3.0, 4.0]))
       assert Nx.shape(result) == {2, 2}
@@ -243,7 +275,12 @@ defmodule Mlx.CoverageTest do
     end
 
     test "c64 tensor creation" do
-      t = Nx.tensor([Complex.new(1.0, 2.0), Complex.new(3.0, 4.0)], type: :c64, backend: Mlx.Backend)
+      t =
+        Nx.tensor([Complex.new(1.0, 2.0), Complex.new(3.0, 4.0)],
+          type: :c64,
+          backend: Mlx.Backend
+        )
+
       assert Nx.shape(t) == {2}
       assert Nx.type(t) == {:c, 64}
     end
@@ -257,7 +294,12 @@ defmodule Mlx.CoverageTest do
 
   describe "conjugate" do
     test "conjugate of complex tensor" do
-      t = Nx.tensor([Complex.new(1.0, 2.0), Complex.new(3.0, -4.0)], type: :c64, backend: Mlx.Backend)
+      t =
+        Nx.tensor([Complex.new(1.0, 2.0), Complex.new(3.0, -4.0)],
+          type: :c64,
+          backend: Mlx.Backend
+        )
+
       result = Nx.conjugate(t)
       list = Nx.to_flat_list(result)
       assert length(list) == 2

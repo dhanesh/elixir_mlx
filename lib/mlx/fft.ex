@@ -168,13 +168,16 @@ defmodule Mlx.FFT do
 
   defp multi_opts(tensor, default_ndim, opts) do
     axes = Keyword.get(opts, :axes, nil)
-    axes_list = axes || Enum.to_list(-(min(default_ndim, tuple_size(tensor.shape)))..-1)
+    axes_list = axes || Enum.to_list(-min(default_ndim, tuple_size(tensor.shape))..-1)
 
     n = Keyword.get(opts, :n, nil)
-    n_list = n || Enum.map(axes_list, fn ax ->
-      resolved = resolve_axis(ax, tuple_size(tensor.shape))
-      elem(tensor.shape, resolved)
-    end)
+
+    n_list =
+      n ||
+        Enum.map(axes_list, fn ax ->
+          resolved = resolve_axis(ax, tuple_size(tensor.shape))
+          elem(tensor.shape, resolved)
+        end)
 
     {n_list, axes_list}
   end
@@ -182,21 +185,24 @@ defmodule Mlx.FFT do
   # For inverse real FFTs: last axis size defaults to 2*(input_size - 1)
   defp multi_opts_irfft(tensor, default_ndim, opts) do
     axes = Keyword.get(opts, :axes, nil)
-    axes_list = axes || Enum.to_list(-(min(default_ndim, tuple_size(tensor.shape)))..-1)
+    axes_list = axes || Enum.to_list(-min(default_ndim, tuple_size(tensor.shape))..-1)
 
     n = Keyword.get(opts, :n, nil)
-    n_list = n || axes_list
-      |> Enum.with_index()
-      |> Enum.map(fn {ax, idx} ->
-        resolved = resolve_axis(ax, tuple_size(tensor.shape))
-        size = elem(tensor.shape, resolved)
-        # Last axis in irfft: output = 2*(input-1)
-        if idx == length(axes_list) - 1 do
-          2 * (size - 1)
-        else
-          size
-        end
-      end)
+
+    n_list =
+      n ||
+        axes_list
+        |> Enum.with_index()
+        |> Enum.map(fn {ax, idx} ->
+          resolved = resolve_axis(ax, tuple_size(tensor.shape))
+          size = elem(tensor.shape, resolved)
+          # Last axis in irfft: output = 2*(input-1)
+          if idx == length(axes_list) - 1 do
+            2 * (size - 1)
+          else
+            size
+          end
+        end)
 
     {n_list, axes_list}
   end

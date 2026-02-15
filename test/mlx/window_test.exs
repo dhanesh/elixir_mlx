@@ -32,6 +32,7 @@ defmodule Mlx.WindowTest do
       assert Nx.shape(result) == {3}
       expected = [3.0, 6.0, 5.0]
       result_list = Nx.to_flat_list(result)
+
       Enum.zip(expected, result_list)
       |> Enum.each(fn {e, r} -> assert_in_delta(e, r, 1.0e-5) end)
     end
@@ -73,6 +74,7 @@ defmodule Mlx.WindowTest do
       result = Nx.window_product(t, {2})
       result_list = Nx.to_flat_list(result)
       expected = [2.0, 6.0, 12.0]
+
       Enum.zip(expected, result_list)
       |> Enum.each(fn {e, r} -> assert_in_delta(e, r, 1.0e-5) end)
     end

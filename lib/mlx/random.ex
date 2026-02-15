@@ -78,7 +78,7 @@ defmodule Mlx.Random do
 
     low_ref = to_mlx_scalar(low)
     high_ref = to_mlx_scalar(high)
-    key_ref = key || :nil
+    key_ref = key || nil
 
     ref = unwrap!(NIF.mlx_random_uniform(low_ref, high_ref, shape, dtype, key_ref, s()))
 
@@ -106,7 +106,7 @@ defmodule Mlx.Random do
     loc = Keyword.get(opts, :loc, 0.0) / 1
     scale = Keyword.get(opts, :scale, 1.0) / 1
     key = Keyword.get(opts, :key, nil)
-    key_ref = key || :nil
+    key_ref = key || nil
 
     ref = unwrap!(NIF.mlx_random_normal(shape, dtype, loc, scale, key_ref, s()))
 
@@ -132,7 +132,7 @@ defmodule Mlx.Random do
     key = Keyword.get(opts, :key, nil)
 
     p_ref = to_mlx_scalar(p)
-    key_ref = key || :nil
+    key_ref = key || nil
 
     ref = unwrap!(NIF.mlx_random_bernoulli(p_ref, shape, key_ref, s()))
 
@@ -159,7 +159,7 @@ defmodule Mlx.Random do
 
     low_ref = to_mlx_scalar(low)
     high_ref = to_mlx_scalar(high)
-    key_ref = key || :nil
+    key_ref = key || nil
 
     ref = unwrap!(NIF.mlx_random_randint(low_ref, high_ref, shape, dtype, key_ref, s()))
 
@@ -186,7 +186,7 @@ defmodule Mlx.Random do
 
     lower_ref = to_mlx_scalar(lower)
     upper_ref = to_mlx_scalar(upper)
-    key_ref = key || :nil
+    key_ref = key || nil
 
     ref =
       unwrap!(NIF.mlx_random_truncated_normal(lower_ref, upper_ref, shape, dtype, key_ref, s()))
@@ -209,7 +209,7 @@ defmodule Mlx.Random do
   def categorical(%Nx.Tensor{data: %Mlx.Backend{ref: logits_ref}} = logits, opts \\ []) do
     axis = Keyword.get(opts, :axis, -1)
     key = Keyword.get(opts, :key, nil)
-    key_ref = key || :nil
+    key_ref = key || nil
 
     ref = unwrap!(NIF.mlx_random_categorical(logits_ref, axis, key_ref, s()))
 
@@ -240,7 +240,7 @@ defmodule Mlx.Random do
     shape = Keyword.get(opts, :shape, {}) |> Tuple.to_list()
     dtype = Keyword.get(opts, :dtype, :f32)
     key = Keyword.get(opts, :key, nil)
-    key_ref = key || :nil
+    key_ref = key || nil
 
     ref = unwrap!(NIF.mlx_random_gumbel(shape, dtype, key_ref, s()))
 
@@ -268,7 +268,7 @@ defmodule Mlx.Random do
     loc = Keyword.get(opts, :loc, 0.0) / 1
     scale = Keyword.get(opts, :scale, 1.0) / 1
     key = Keyword.get(opts, :key, nil)
-    key_ref = key || :nil
+    key_ref = key || nil
 
     ref = unwrap!(NIF.mlx_random_laplace(shape, dtype, loc, scale, key_ref, s()))
 

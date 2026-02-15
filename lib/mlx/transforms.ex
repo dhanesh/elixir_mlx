@@ -195,7 +195,6 @@ defmodule Mlx.Transforms do
 
       :done ->
         :ok
-
     after
       30_000 -> :ok
     end

@@ -58,7 +58,9 @@ defmodule Mlx.Backend do
         {:ok, stream} = Mlx.NIF.default_cpu_stream()
         Process.put(@cpu_stream_key, stream)
         stream
-      stream -> stream
+
+      stream ->
+        stream
     end
   end
 
@@ -240,7 +242,7 @@ defmodule Mlx.Backend do
     {:greater, :mlx_greater},
     {:greater_equal, :mlx_greater_equal},
     {:logical_and, :mlx_logical_and},
-    {:logical_or, :mlx_logical_or},
+    {:logical_or, :mlx_logical_or}
   ]
 
   for {nx_op, mlx_op} <- binary_ops do
@@ -572,6 +574,7 @@ defmodule Mlx.Backend do
   # Swap last two axes: [0, 1, ..., n-2, n-1] → [0, 1, ..., n-1, n-2]
   defp swap_last_two(ndim) when ndim >= 2 do
     axes = Enum.to_list(0..(ndim - 1))
+
     List.update_at(axes, ndim - 2, fn _ -> ndim - 1 end)
     |> List.update_at(ndim - 1, fn _ -> ndim - 2 end)
   end
@@ -611,7 +614,11 @@ defmodule Mlx.Backend do
   end
 
   @impl true
-  def lu({%Nx.Tensor{} = p_out, %Nx.Tensor{} = l_out, %Nx.Tensor{} = u_out}, %Nx.Tensor{} = tensor, _opts) do
+  def lu(
+        {%Nx.Tensor{} = p_out, %Nx.Tensor{} = l_out, %Nx.Tensor{} = u_out},
+        %Nx.Tensor{} = tensor,
+        _opts
+      ) do
     ref = from_ref(tensor)
     [pivots_ref, l_ref, u_ref] = unwrap!(Mlx.NIF.mlx_linalg_lu(ref, cpu_s()))
     # MLX returns pivot indices (uint32 1D), Nx expects a permutation matrix (float 2D)
@@ -620,7 +627,11 @@ defmodule Mlx.Backend do
   end
 
   @impl true
-  def eigh({%Nx.Tensor{} = eigenvals_out, %Nx.Tensor{} = eigenvecs_out}, %Nx.Tensor{} = tensor, _opts) do
+  def eigh(
+        {%Nx.Tensor{} = eigenvals_out, %Nx.Tensor{} = eigenvecs_out},
+        %Nx.Tensor{} = tensor,
+        _opts
+      ) do
     ref = from_ref(tensor)
     {ev_ref, evec_ref} = unwrap!(Mlx.NIF.mlx_linalg_eigh(ref, :L, cpu_s()))
     {to_nx(eigenvals_out, ev_ref), to_nx(eigenvecs_out, evec_ref)}
@@ -635,7 +646,11 @@ defmodule Mlx.Backend do
   end
 
   @impl true
-  def svd({%Nx.Tensor{} = u_out, %Nx.Tensor{} = s_out, %Nx.Tensor{} = vt_out}, %Nx.Tensor{} = tensor, opts) do
+  def svd(
+        {%Nx.Tensor{} = u_out, %Nx.Tensor{} = s_out, %Nx.Tensor{} = vt_out},
+        %Nx.Tensor{} = tensor,
+        opts
+      ) do
     ref = from_ref(tensor)
     [u_ref, s_ref, vt_ref] = unwrap!(Mlx.NIF.mlx_linalg_svd(ref, cpu_s()))
 
@@ -1276,15 +1291,15 @@ defmodule Mlx.Backend do
   @impl true
   def from_pointer(_arg1, _arg2, _arg3, _arg4, _arg5) do
     raise ArgumentError,
-      "from_pointer is not supported by Mlx.Backend. " <>
-        "MLX arrays are managed by the MLX runtime. Use Nx.from_binary/3 instead."
+          "from_pointer is not supported by Mlx.Backend. " <>
+            "MLX arrays are managed by the MLX runtime. Use Nx.from_binary/3 instead."
   end
 
   @impl true
   def to_pointer(_tensor, _opts) do
     raise ArgumentError,
-      "to_pointer is not supported by Mlx.Backend. " <>
-        "MLX arrays are managed by the MLX runtime. Use Nx.to_binary/1 instead."
+          "to_pointer is not supported by Mlx.Backend. " <>
+            "MLX arrays are managed by the MLX runtime. Use Nx.to_binary/1 instead."
   end
 
   # Window ops — implemented via as_strided + reductions

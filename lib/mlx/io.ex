@@ -27,6 +27,7 @@ defmodule Mlx.IO do
   def save(path, %Nx.Tensor{} = tensor) when is_binary(path) do
     ref = from_ref(tensor)
     NIF.eval(ref)
+
     case NIF.mlx_save(to_charlist(path), ref) do
       :ok -> :ok
       {:error, msg} -> raise "MLX error: #{msg}"
@@ -166,7 +167,9 @@ defmodule Mlx.IO do
 
     # Group weights by shard file — load each shard file only once
     shards_to_keys =
-      Enum.group_by(weight_map, fn {_key, shard_file} -> shard_file end, fn {key, _shard} -> key end)
+      Enum.group_by(weight_map, fn {_key, shard_file} -> shard_file end, fn {key, _shard} ->
+        key
+      end)
 
     Enum.reduce(shards_to_keys, %{}, fn {shard_file, keys}, acc ->
       shard_path = Path.join(dir, shard_file)

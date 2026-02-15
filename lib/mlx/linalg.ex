@@ -77,6 +77,7 @@ defmodule Mlx.Linalg do
   """
   def svd(%Nx.Tensor{} = a) do
     parts = unwrap!(NIF.mlx_linalg_svd(from_ref(a), s()))
+
     Enum.map(parts, &to_nx_infer(&1, a.type))
     |> List.to_tuple()
   end
@@ -114,6 +115,7 @@ defmodule Mlx.Linalg do
   """
   def lu(%Nx.Tensor{} = a) do
     parts = unwrap!(NIF.mlx_linalg_lu(from_ref(a), s()))
+
     Enum.map(parts, &to_nx_infer(&1, a.type))
     |> List.to_tuple()
   end

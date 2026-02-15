@@ -46,7 +46,10 @@ defmodule Mlx.QuantizeTest do
       w = make_matrix(32, 32)
       {quantized, scales, biases} = Mlx.Quantize.quantize(w, group_size: 32, bits: 4)
       x = make_matrix(1, 32)
-      result = Mlx.Quantize.quantized_matmul(x, quantized, scales, biases, group_size: 32, bits: 4)
+
+      result =
+        Mlx.Quantize.quantized_matmul(x, quantized, scales, biases, group_size: 32, bits: 4)
+
       assert Nx.shape(result) == {1, 32}
     end
   end

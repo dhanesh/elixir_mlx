@@ -69,7 +69,8 @@ defmodule ElixirMlx.MixProject do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url},
-      files: ~w(lib c_src/mlx_nif.c c_src/mlx_nif.h mix.exs Makefile README.md CHANGELOG.md LICENSE checksum-elixir_mlx.exs)
+      files:
+        ~w(lib c_src/mlx_nif.c c_src/mlx_nif.h mix.exs Makefile README.md CHANGELOG.md LICENSE checksum-elixir_mlx.exs)
     ]
   end
 

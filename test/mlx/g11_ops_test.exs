@@ -99,9 +99,12 @@ defmodule Mlx.G11OpsTest do
 
     test "max via reduce" do
       t = Nx.tensor([3, 1, 4, 1, 5, 9, 2, 6])
-      result = Nx.reduce(t, Nx.Constants.min(:s32), fn x, acc ->
-        Nx.select(Nx.greater(x, acc), x, acc)
-      end)
+
+      result =
+        Nx.reduce(t, Nx.Constants.min(:s32), fn x, acc ->
+          Nx.select(Nx.greater(x, acc), x, acc)
+        end)
+
       assert Nx.to_number(result) == 9
     end
 
@@ -123,9 +126,12 @@ defmodule Mlx.G11OpsTest do
 
     test "custom max via window_reduce" do
       t = Nx.tensor([3, 1, 4, 1, 5])
-      result = Nx.window_reduce(t, Nx.Constants.min(:s32), {3}, fn x, acc ->
-        Nx.select(Nx.greater(x, acc), x, acc)
-      end)
+
+      result =
+        Nx.window_reduce(t, Nx.Constants.min(:s32), {3}, fn x, acc ->
+          Nx.select(Nx.greater(x, acc), x, acc)
+        end)
+
       assert Nx.to_flat_list(result) == [4, 4, 5]
     end
 

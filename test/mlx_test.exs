@@ -829,8 +829,10 @@ defmodule MlxTest do
   describe "conv" do
     test "1D convolution" do
       # Simple 1D convolution: [1, 2, 3, 4, 5] * [1, 1] with valid padding
-      input = Nx.tensor([[[1.0, 2.0, 3.0, 4.0, 5.0]]])  # {1, 1, 5} = NCHW
-      kernel = Nx.tensor([[[1.0, 1.0]]])  # {1, 1, 2} = OIHW
+      # {1, 1, 5} = NCHW
+      input = Nx.tensor([[[1.0, 2.0, 3.0, 4.0, 5.0]]])
+      # {1, 1, 2} = OIHW
+      kernel = Nx.tensor([[[1.0, 1.0]]])
       result = Nx.conv(input, kernel)
       assert Nx.shape(result) == {1, 1, 4}
       assert_all_close(result, Nx.tensor([[[3.0, 5.0, 7.0, 9.0]]]))
@@ -838,8 +840,10 @@ defmodule MlxTest do
 
     test "2D convolution identity kernel" do
       # 2D convolution with 1x1 identity kernel
-      input = Nx.tensor([[[[1.0, 2.0], [3.0, 4.0]]]])  # {1, 1, 2, 2}
-      kernel = Nx.tensor([[[[1.0]]]])  # {1, 1, 1, 1}
+      # {1, 1, 2, 2}
+      input = Nx.tensor([[[[1.0, 2.0], [3.0, 4.0]]]])
+      # {1, 1, 1, 1}
+      kernel = Nx.tensor([[[[1.0]]]])
       result = Nx.conv(input, kernel)
       assert Nx.shape(result) == {1, 1, 2, 2}
       assert_all_close(result, input)

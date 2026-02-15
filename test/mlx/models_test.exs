@@ -45,7 +45,11 @@ defmodule Mlx.ModelsTest do
     test "loads config from directory" do
       dir = Path.join(System.tmp_dir!(), "mlx_models_cfg_#{:rand.uniform(100_000)}")
       File.mkdir_p!(dir)
-      File.write!(Path.join(dir, "config.json"), Jason.encode!(%{"model_type" => "test", "hidden_size" => 128}))
+
+      File.write!(
+        Path.join(dir, "config.json"),
+        Jason.encode!(%{"model_type" => "test", "hidden_size" => 128})
+      )
 
       config = Mlx.Models.load_config(dir)
       assert config["model_type"] == "test"

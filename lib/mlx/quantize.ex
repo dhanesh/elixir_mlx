@@ -74,7 +74,13 @@ defmodule Mlx.Quantize do
     * `:group_size` - must match quantization (default: 64)
     * `:bits` - must match quantization (default: 4)
   """
-  def quantized_matmul(%Nx.Tensor{} = x, %Nx.Tensor{} = w, %Nx.Tensor{} = scales, %Nx.Tensor{} = biases, opts \\ []) do
+  def quantized_matmul(
+        %Nx.Tensor{} = x,
+        %Nx.Tensor{} = w,
+        %Nx.Tensor{} = scales,
+        %Nx.Tensor{} = biases,
+        opts \\ []
+      ) do
     transpose = Keyword.get(opts, :transpose, true)
     group_size = Keyword.get(opts, :group_size, 64)
     bits = Keyword.get(opts, :bits, 4)

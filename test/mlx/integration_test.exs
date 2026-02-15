@@ -114,10 +114,18 @@ defmodule Mlx.IntegrationTest do
         |> Axon.dense(1, activation: :sigmoid)
 
       # Simple separable data: class 0 = low values, class 1 = high values
-      xs = Nx.tensor([
-        [0.1, 0.2], [0.2, 0.1], [0.15, 0.25], [0.3, 0.1],
-        [0.8, 0.9], [0.9, 0.8], [0.85, 0.75], [0.7, 0.9]
-      ])
+      xs =
+        Nx.tensor([
+          [0.1, 0.2],
+          [0.2, 0.1],
+          [0.15, 0.25],
+          [0.3, 0.1],
+          [0.8, 0.9],
+          [0.9, 0.8],
+          [0.85, 0.75],
+          [0.7, 0.9]
+        ])
+
       ys = Nx.tensor([[0], [0], [0], [0], [1], [1], [1], [1]])
 
       data = [{xs, ys}] |> Stream.cycle()
@@ -135,6 +143,7 @@ defmodule Mlx.IntegrationTest do
       {_init_fn, predict_fn} = Axon.build(model)
       preds = predict_fn.(trained_state, %{"input" => xs})
       pred_list = Nx.to_flat_list(preds)
+
       Enum.each(pred_list, fn v ->
         assert v >= 0.0 and v <= 1.0, "sigmoid output #{v} out of range"
       end)
@@ -146,14 +155,16 @@ defmodule Mlx.IntegrationTest do
   describe "Scholar.Linear.LinearRegression" do
     test "fits and predicts simple linear relationship" do
       # y = 2*x1 + 3*x2 + 1
-      x = Nx.tensor([
-        [1.0, 1.0],
-        [2.0, 1.0],
-        [3.0, 2.0],
-        [4.0, 2.0],
-        [5.0, 3.0],
-        [6.0, 3.0]
-      ])
+      x =
+        Nx.tensor([
+          [1.0, 1.0],
+          [2.0, 1.0],
+          [3.0, 2.0],
+          [4.0, 2.0],
+          [5.0, 3.0],
+          [6.0, 3.0]
+        ])
+
       y = Nx.tensor([6.0, 8.0, 13.0, 15.0, 20.0, 22.0])
 
       model = Scholar.Linear.LinearRegression.fit(x, y)
@@ -188,10 +199,11 @@ defmodule Mlx.IntegrationTest do
 
       data = Nx.concatenate([c1, c2], axis: 0)
 
-      model = Scholar.Cluster.KMeans.fit(data,
-        num_clusters: 2,
-        key: Nx.Random.key(42)
-      )
+      model =
+        Scholar.Cluster.KMeans.fit(data,
+          num_clusters: 2,
+          key: Nx.Random.key(42)
+        )
 
       # Should have 2 cluster centers
       assert Nx.shape(model.clusters) == {2, 2}
@@ -202,10 +214,12 @@ defmodule Mlx.IntegrationTest do
       center2 = {Enum.at(centers, 2), Enum.at(centers, 3)}
 
       # Distance between cluster centers should be large (>5)
-      dist = :math.sqrt(
-        :math.pow(elem(center1, 0) - elem(center2, 0), 2) +
-        :math.pow(elem(center1, 1) - elem(center2, 1), 2)
-      )
+      dist =
+        :math.sqrt(
+          :math.pow(elem(center1, 0) - elem(center2, 0), 2) +
+            :math.pow(elem(center1, 1) - elem(center2, 1), 2)
+        )
+
       assert dist > 5.0, "Cluster centers should be well separated, got distance #{dist}"
 
       # Predictions should assign points to correct clusters
@@ -219,7 +233,9 @@ defmodule Mlx.IntegrationTest do
 
       assert length(Enum.uniq(first_group)) == 1, "First cluster should have uniform labels"
       assert length(Enum.uniq(second_group)) == 1, "Second cluster should have uniform labels"
-      assert Enum.at(first_group, 0) != Enum.at(second_group, 0), "Clusters should have different labels"
+
+      assert Enum.at(first_group, 0) != Enum.at(second_group, 0),
+             "Clusters should have different labels"
     end
   end
 
@@ -228,12 +244,16 @@ defmodule Mlx.IntegrationTest do
   describe "Nx.Defn compilation with Mlx.Compiler" do
     test "compiled function produces correct results" do
       # Test that Mlx.Compiler works for JIT compilation
-      fun = Nx.Defn.jit(fn x, w ->
-        x
-        |> Nx.dot(w)
-        |> Nx.add(1.0)
-        |> Nx.sigmoid()
-      end, compiler: Mlx.Compiler)
+      fun =
+        Nx.Defn.jit(
+          fn x, w ->
+            x
+            |> Nx.dot(w)
+            |> Nx.add(1.0)
+            |> Nx.sigmoid()
+          end,
+          compiler: Mlx.Compiler
+        )
 
       x = Nx.tensor([[1.0, 2.0, 3.0]])
       w = Nx.tensor([[0.1], [0.2], [0.3]])
@@ -246,11 +266,15 @@ defmodule Mlx.IntegrationTest do
     end
 
     test "compiled function with multiple outputs" do
-      fun = Nx.Defn.jit(fn x ->
-        mean = Nx.mean(x)
-        std = Nx.standard_deviation(x)
-        {mean, std}
-      end, compiler: Mlx.Compiler)
+      fun =
+        Nx.Defn.jit(
+          fn x ->
+            mean = Nx.mean(x)
+            std = Nx.standard_deviation(x)
+            {mean, std}
+          end,
+          compiler: Mlx.Compiler
+        )
 
       x = Nx.tensor([1.0, 2.0, 3.0, 4.0, 5.0])
       {mean, std} = fun.(x)

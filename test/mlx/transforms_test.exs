@@ -5,9 +5,10 @@ defmodule Mlx.TransformsTest do
 
   describe "Mlx.Transforms.value_and_grad" do
     test "scalar quadratic: f(x) = x^2" do
-      vag_fn = Mlx.Transforms.value_and_grad(fn [x] ->
-        [Nx.pow(x, 2)]
-      end)
+      vag_fn =
+        Mlx.Transforms.value_and_grad(fn [x] ->
+          [Nx.pow(x, 2)]
+        end)
 
       {[value], [grad]} = vag_fn.([Nx.tensor(3.0, backend: Mlx.Backend)])
 
@@ -16,24 +17,30 @@ defmodule Mlx.TransformsTest do
     end
 
     test "vector sum of squares: f(x) = sum(x^2)" do
-      vag_fn = Mlx.Transforms.value_and_grad(fn [x] ->
-        [Nx.sum(Nx.pow(x, 2))]
-      end)
+      vag_fn =
+        Mlx.Transforms.value_and_grad(fn [x] ->
+          [Nx.sum(Nx.pow(x, 2))]
+        end)
 
       {[value], [grad]} = vag_fn.([Nx.tensor([1.0, 2.0, 3.0], backend: Mlx.Backend)])
 
       assert_in_delta Nx.to_number(value), 14.0, 1.0e-5
       # grad of sum(x^2) = 2x
       expected = [2.0, 4.0, 6.0]
+
       for {actual, exp} <- Enum.zip(Nx.to_flat_list(grad), expected) do
         assert_in_delta actual, exp, 1.0e-5
       end
     end
 
     test "multi-argument: f(x, y) = sum(x * y), grad w.r.t. x" do
-      vag_fn = Mlx.Transforms.value_and_grad(fn [x, y] ->
-        [Nx.sum(Nx.multiply(x, y))]
-      end, [0])
+      vag_fn =
+        Mlx.Transforms.value_and_grad(
+          fn [x, y] ->
+            [Nx.sum(Nx.multiply(x, y))]
+          end,
+          [0]
+        )
 
       x = Nx.tensor([1.0, 2.0], backend: Mlx.Backend)
       y = Nx.tensor([3.0, 4.0], backend: Mlx.Backend)
@@ -46,9 +53,10 @@ defmodule Mlx.TransformsTest do
     end
 
     test "sigmoid loss" do
-      vag_fn = Mlx.Transforms.value_and_grad(fn [x] ->
-        [Nx.sum(Nx.sigmoid(x))]
-      end)
+      vag_fn =
+        Mlx.Transforms.value_and_grad(fn [x] ->
+          [Nx.sum(Nx.sigmoid(x))]
+        end)
 
       {[value], [grad]} = vag_fn.([Nx.tensor([0.0], backend: Mlx.Backend)])
 
@@ -61,22 +69,25 @@ defmodule Mlx.TransformsTest do
 
   describe "Mlx.Transforms.grad" do
     test "simple gradient" do
-      grad_fn = Mlx.Transforms.grad(fn [x] ->
-        [Nx.sum(Nx.pow(x, 2))]
-      end)
+      grad_fn =
+        Mlx.Transforms.grad(fn [x] ->
+          [Nx.sum(Nx.pow(x, 2))]
+        end)
 
       [grad] = grad_fn.([Nx.tensor([1.0, 2.0, 3.0], backend: Mlx.Backend)])
 
       expected = [2.0, 4.0, 6.0]
+
       for {actual, exp} <- Enum.zip(Nx.to_flat_list(grad), expected) do
         assert_in_delta actual, exp, 1.0e-5
       end
     end
 
     test "gradient at zero" do
-      grad_fn = Mlx.Transforms.grad(fn [x] ->
-        [Nx.pow(x, 2)]
-      end)
+      grad_fn =
+        Mlx.Transforms.grad(fn [x] ->
+          [Nx.pow(x, 2)]
+        end)
 
       [grad] = grad_fn.([Nx.tensor(0.0, backend: Mlx.Backend)])
       assert_in_delta Nx.to_number(grad), 0.0, 1.0e-5
@@ -86,11 +97,12 @@ defmodule Mlx.TransformsTest do
   describe "Mlx.Transforms.vjp" do
     test "vector-Jacobian product of identity" do
       # f(x) = x, so J = I, and vjp = cotangent * I = cotangent
-      {_outputs, vjps} = Mlx.Transforms.vjp(
-        fn [x] -> [x] end,
-        [Nx.tensor([1.0, 2.0, 3.0], backend: Mlx.Backend)],
-        [Nx.tensor([1.0, 1.0, 1.0], backend: Mlx.Backend)]
-      )
+      {_outputs, vjps} =
+        Mlx.Transforms.vjp(
+          fn [x] -> [x] end,
+          [Nx.tensor([1.0, 2.0, 3.0], backend: Mlx.Backend)],
+          [Nx.tensor([1.0, 1.0, 1.0], backend: Mlx.Backend)]
+        )
 
       [vjp] = vjps
       assert Nx.to_flat_list(vjp) == [1.0, 1.0, 1.0]
@@ -98,11 +110,12 @@ defmodule Mlx.TransformsTest do
 
     test "vjp of scalar multiply" do
       # f(x) = 2*x, J = 2I, vjp = 2 * cotangent
-      {_outputs, vjps} = Mlx.Transforms.vjp(
-        fn [x] -> [Nx.multiply(x, 2)] end,
-        [Nx.tensor([1.0, 2.0, 3.0], backend: Mlx.Backend)],
-        [Nx.tensor([1.0, 1.0, 1.0], backend: Mlx.Backend)]
-      )
+      {_outputs, vjps} =
+        Mlx.Transforms.vjp(
+          fn [x] -> [Nx.multiply(x, 2)] end,
+          [Nx.tensor([1.0, 2.0, 3.0], backend: Mlx.Backend)],
+          [Nx.tensor([1.0, 1.0, 1.0], backend: Mlx.Backend)]
+        )
 
       [vjp] = vjps
       assert Nx.to_flat_list(vjp) == [2.0, 2.0, 2.0]
@@ -112,11 +125,12 @@ defmodule Mlx.TransformsTest do
   describe "Mlx.Transforms.jvp" do
     test "Jacobian-vector product of identity" do
       # f(x) = x, J = I, jvp = I * tangent = tangent
-      {_outputs, jvps} = Mlx.Transforms.jvp(
-        fn [x] -> [x] end,
-        [Nx.tensor([1.0, 2.0, 3.0], backend: Mlx.Backend)],
-        [Nx.tensor([1.0, 1.0, 1.0], backend: Mlx.Backend)]
-      )
+      {_outputs, jvps} =
+        Mlx.Transforms.jvp(
+          fn [x] -> [x] end,
+          [Nx.tensor([1.0, 2.0, 3.0], backend: Mlx.Backend)],
+          [Nx.tensor([1.0, 1.0, 1.0], backend: Mlx.Backend)]
+        )
 
       [jvp] = jvps
       assert Nx.to_flat_list(jvp) == [1.0, 1.0, 1.0]
@@ -124,11 +138,12 @@ defmodule Mlx.TransformsTest do
 
     test "jvp of scalar multiply" do
       # f(x) = 3*x, J = 3I, jvp = 3 * tangent
-      {_outputs, jvps} = Mlx.Transforms.jvp(
-        fn [x] -> [Nx.multiply(x, 3)] end,
-        [Nx.tensor([1.0, 2.0], backend: Mlx.Backend)],
-        [Nx.tensor([1.0, 1.0], backend: Mlx.Backend)]
-      )
+      {_outputs, jvps} =
+        Mlx.Transforms.jvp(
+          fn [x] -> [Nx.multiply(x, 3)] end,
+          [Nx.tensor([1.0, 2.0], backend: Mlx.Backend)],
+          [Nx.tensor([1.0, 1.0], backend: Mlx.Backend)]
+        )
 
       [jvp] = jvps
       assert Nx.to_flat_list(jvp) == [3.0, 3.0]
@@ -144,6 +159,7 @@ defmodule Mlx.TransformsTest do
       [result] = vmap_fn.([input])
 
       expected = [[1.0, 4.0, 9.0], [16.0, 25.0, 36.0]]
+
       for {row_actual, row_exp} <- Enum.zip(Nx.to_list(result), expected) do
         for {actual, exp} <- Enum.zip(row_actual, row_exp) do
           assert_in_delta actual, exp, 1.0e-5
@@ -159,6 +175,7 @@ defmodule Mlx.TransformsTest do
       [result] = vmap_fn.([input])
 
       expected = [6.0, 15.0]
+
       for {actual, exp} <- Enum.zip(Nx.to_flat_list(result), expected) do
         assert_in_delta actual, exp, 1.0e-5
       end
@@ -173,6 +190,7 @@ defmodule Mlx.TransformsTest do
       [result] = vmap_fn.([x, y])
 
       expected = [[5.0, 12.0], [21.0, 32.0]]
+
       for {row_actual, row_exp} <- Enum.zip(Nx.to_list(result), expected) do
         for {actual, exp} <- Enum.zip(row_actual, row_exp) do
           assert_in_delta actual, exp, 1.0e-5
@@ -191,6 +209,7 @@ defmodule Mlx.TransformsTest do
 
       # [1+4+9, 16+25+36] = [14, 77]
       expected = [14.0, 77.0]
+
       for {actual, exp} <- Enum.zip(Nx.to_flat_list(result), expected) do
         assert_in_delta actual, exp, 1.0e-5
       end
@@ -204,6 +223,7 @@ defmodule Mlx.TransformsTest do
       [result] = vmap_fn.([input])
 
       expected = [[2.0, 3.0], [4.0, 5.0]]
+
       for {row_actual, row_exp} <- Enum.zip(Nx.to_list(result), expected) do
         for {actual, exp} <- Enum.zip(row_actual, row_exp) do
           assert_in_delta actual, exp, 1.0e-5
@@ -214,14 +234,16 @@ defmodule Mlx.TransformsTest do
 
   describe "Mlx.Transforms with BinaryBackend inputs" do
     test "auto-transfers from BinaryBackend" do
-      grad_fn = Mlx.Transforms.grad(fn [x] ->
-        [Nx.sum(Nx.pow(x, 2))]
-      end)
+      grad_fn =
+        Mlx.Transforms.grad(fn [x] ->
+          [Nx.sum(Nx.pow(x, 2))]
+        end)
 
       # Inputs on BinaryBackend should be auto-transferred
       [grad] = grad_fn.([Nx.tensor([1.0, 2.0], backend: Nx.BinaryBackend)])
 
       expected = [2.0, 4.0]
+
       for {actual, exp} <- Enum.zip(Nx.to_flat_list(grad), expected) do
         assert_in_delta actual, exp, 1.0e-5
       end

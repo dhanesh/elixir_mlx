@@ -212,6 +212,7 @@ defmodule Mlx.NIF do
   def mlx_topk(_arr, _k, _axis, _stream), do: :erlang.nif_error(:not_loaded)
   def mlx_partition(_arr, _kth, _axis, _stream), do: :erlang.nif_error(:not_loaded)
   def mlx_argpartition(_arr, _kth, _axis, _stream), do: :erlang.nif_error(:not_loaded)
+
   def mlx_put_along_axis(_arr, _indices, _values, _axis, _stream),
     do: :erlang.nif_error(:not_loaded)
 
@@ -331,7 +332,10 @@ defmodule Mlx.NIF do
   # --- I/O ---
   def mlx_save(_path, _arr), do: :erlang.nif_error(:not_loaded)
   def mlx_load(_path, _stream), do: :erlang.nif_error(:not_loaded)
-  def mlx_save_safetensors(_path, _keys, _arrays, _meta_keys, _meta_vals), do: :erlang.nif_error(:not_loaded)
+
+  def mlx_save_safetensors(_path, _keys, _arrays, _meta_keys, _meta_vals),
+    do: :erlang.nif_error(:not_loaded)
+
   def mlx_load_safetensors(_path, _stream), do: :erlang.nif_error(:not_loaded)
 
   # --- Device / Stream ---

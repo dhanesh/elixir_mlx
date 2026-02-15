@@ -79,7 +79,11 @@ defmodule Mlx.NN do
   defn selu(x) do
     alpha = 1.6732632423543772
     lambda = 1.0507009873554805
-    Nx.multiply(lambda, Nx.select(Nx.greater(x, 0), x, Nx.multiply(alpha, Nx.subtract(Nx.exp(x), 1))))
+
+    Nx.multiply(
+      lambda,
+      Nx.select(Nx.greater(x, 0), x, Nx.multiply(alpha, Nx.subtract(Nx.exp(x), 1)))
+    )
   end
 
   @doc """
@@ -89,7 +93,10 @@ defmodule Mlx.NN do
   Uses the exact formulation via `erf`.
   """
   defn gelu(x) do
-    Nx.multiply(x, Nx.multiply(0.5, Nx.add(1.0, Nx.erf(Nx.multiply(x, Nx.rsqrt(Nx.tensor(2.0)))))))
+    Nx.multiply(
+      x,
+      Nx.multiply(0.5, Nx.add(1.0, Nx.erf(Nx.multiply(x, Nx.rsqrt(Nx.tensor(2.0))))))
+    )
   end
 
   @doc """
@@ -102,7 +109,7 @@ defmodule Mlx.NN do
   end
 
   @doc "Alias for `silu/1`."
-  defn swish(x), do: silu(x)
+  defn(swish(x), do: silu(x))
 
   @doc """
   Mish activation: `x * tanh(softplus(x))`.
@@ -131,7 +138,11 @@ defmodule Mlx.NN do
   defn celu(x, opts \\ []) do
     opts = keyword!(opts, alpha: 1.0)
     alpha = opts[:alpha]
-    Nx.add(Nx.max(x, 0), Nx.min(0, Nx.multiply(alpha, Nx.subtract(Nx.exp(Nx.divide(x, alpha)), 1))))
+
+    Nx.add(
+      Nx.max(x, 0),
+      Nx.min(0, Nx.multiply(alpha, Nx.subtract(Nx.exp(Nx.divide(x, alpha)), 1)))
+    )
   end
 
   @doc """

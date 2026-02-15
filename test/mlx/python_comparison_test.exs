@@ -25,14 +25,15 @@ defmodule Mlx.PythonComparisonTest do
 
     Enum.zip(actual_list, List.flatten(expected))
     |> Enum.each(fn {a, e} ->
-      assert_in_delta a, e, atol,
-        "expected #{a} to be within #{atol} of #{e}"
+      assert_in_delta a, e, atol, "expected #{a} to be within #{atol} of #{e}"
     end)
   end
 
   defp assert_close_scalar(actual, expected, atol \\ @default_atol) do
-    assert_in_delta Nx.to_number(actual), expected, atol,
-      "expected #{Nx.to_number(actual)} to be within #{atol} of #{expected}"
+    assert_in_delta Nx.to_number(actual),
+                    expected,
+                    atol,
+                    "expected #{Nx.to_number(actual)} to be within #{atol} of #{expected}"
   end
 
   defp to_tensor(data) when is_list(data) do
@@ -151,7 +152,10 @@ defmodule Mlx.PythonComparisonTest do
   test "softmax matches Python MLX" do
     ref = @refs["softmax"]
     input = to_tensor(ref["input"])
-    result = Nx.exp(input) |> then(fn x -> Nx.divide(x, Nx.sum(x, axes: [-1], keep_axes: true)) end)
+
+    result =
+      Nx.exp(input) |> then(fn x -> Nx.divide(x, Nx.sum(x, axes: [-1], keep_axes: true)) end)
+
     assert_close(result, ref["output"])
   end
 

@@ -32,8 +32,8 @@ defmodule Mlx.Fast do
   """
   def layer_norm(%Nx.Tensor{} = x, weight \\ nil, bias \\ nil, opts \\ []) do
     eps = Keyword.get(opts, :eps, 1.0e-5)
-    w = if weight, do: from_ref(weight), else: :nil
-    b = if bias, do: from_ref(bias), else: :nil
+    w = if weight, do: from_ref(weight), else: nil
+    b = if bias, do: from_ref(bias), else: nil
     ref = unwrap!(NIF.mlx_fast_layer_norm(from_ref(x), w, b, eps / 1, s()))
     to_nx_infer(ref)
   end
@@ -74,8 +74,8 @@ defmodule Mlx.Fast do
     offset = Keyword.get(opts, :offset, 0)
     freqs = Keyword.get(opts, :freqs, nil)
 
-    base_val = if base, do: base / 1, else: :nil
-    freqs_ref = if freqs, do: from_ref(freqs), else: :nil
+    base_val = if base, do: base / 1, else: nil
+    freqs_ref = if freqs, do: from_ref(freqs), else: nil
 
     ref =
       unwrap!(
@@ -109,9 +109,15 @@ defmodule Mlx.Fast do
   ## Options
     * `:mask` - optional attention mask tensor (default: nil)
   """
-  def scaled_dot_product_attention(%Nx.Tensor{} = q, %Nx.Tensor{} = k, %Nx.Tensor{} = v, scale, opts \\ []) do
+  def scaled_dot_product_attention(
+        %Nx.Tensor{} = q,
+        %Nx.Tensor{} = k,
+        %Nx.Tensor{} = v,
+        scale,
+        opts \\ []
+      ) do
     mask = Keyword.get(opts, :mask, nil)
-    mask_ref = if mask, do: from_ref(mask), else: :nil
+    mask_ref = if mask, do: from_ref(mask), else: nil
 
     ref =
       unwrap!(
