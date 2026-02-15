@@ -67,6 +67,19 @@ defmodule Mlx.NIF do
   def mlx_real(_arr, _stream), do: :erlang.nif_error(:not_loaded)
   def mlx_imag(_arr, _stream), do: :erlang.nif_error(:not_loaded)
 
+  # --- Wave 1: New unary ops ---
+  def mlx_rsqrt(_arr, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_square(_arr, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_degrees(_arr, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_radians(_arr, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_isfinite(_arr, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_isneginf(_arr, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_isposinf(_arr, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_copy(_arr, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_stop_gradient(_arr, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_ones_like(_arr, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_zeros_like(_arr, _stream), do: :erlang.nif_error(:not_loaded)
+
   # --- Binary ops ---
   def mlx_add(_a, _b, _stream), do: :erlang.nif_error(:not_loaded)
   def mlx_subtract(_a, _b, _stream), do: :erlang.nif_error(:not_loaded)
@@ -88,6 +101,12 @@ defmodule Mlx.NIF do
   def mlx_maximum(_a, _b, _stream), do: :erlang.nif_error(:not_loaded)
   def mlx_minimum(_a, _b, _stream), do: :erlang.nif_error(:not_loaded)
 
+  # --- Wave 1: New binary ops ---
+  def mlx_remainder(_a, _b, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_outer(_a, _b, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_inner(_a, _b, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_kron(_a, _b, _stream), do: :erlang.nif_error(:not_loaded)
+
   # --- Bitwise ops ---
   def mlx_bitwise_and(_a, _b, _stream), do: :erlang.nif_error(:not_loaded)
   def mlx_bitwise_or(_a, _b, _stream), do: :erlang.nif_error(:not_loaded)
@@ -105,6 +124,15 @@ defmodule Mlx.NIF do
   def mlx_argmin(_arr, _axis, _keepdims, _stream), do: :erlang.nif_error(:not_loaded)
   def mlx_all(_arr, _axes, _keepdims, _stream), do: :erlang.nif_error(:not_loaded)
   def mlx_any(_arr, _axes, _keepdims, _stream), do: :erlang.nif_error(:not_loaded)
+
+  # --- Wave 1: New reduction/cumulative ops ---
+  def mlx_logsumexp(_arr, _axes, _keepdims, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_std(_arr, _axes, _keepdims, _ddof, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_var(_arr, _axes, _keepdims, _ddof, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_cumsum(_arr, _axis, _reverse, _inclusive, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_cumprod(_arr, _axis, _reverse, _inclusive, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_cummax(_arr, _axis, _reverse, _inclusive, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_cummin(_arr, _axis, _reverse, _inclusive, _stream), do: :erlang.nif_error(:not_loaded)
 
   # --- Shape ops ---
   def mlx_reshape(_arr, _shape, _stream), do: :erlang.nif_error(:not_loaded)
@@ -161,6 +189,49 @@ defmodule Mlx.NIF do
   def mlx_scatter_add(_arr, _indices, _updates, _axes, _stream),
     do: :erlang.nif_error(:not_loaded)
 
+  # --- Wave 1: New scatter variants ---
+  def mlx_scatter_max(_arr, _indices, _updates, _axes, _stream),
+    do: :erlang.nif_error(:not_loaded)
+
+  def mlx_scatter_min(_arr, _indices, _updates, _axes, _stream),
+    do: :erlang.nif_error(:not_loaded)
+
+  def mlx_scatter_prod(_arr, _indices, _updates, _axes, _stream),
+    do: :erlang.nif_error(:not_loaded)
+
+  # --- Wave 1: Shape/Selection/Comparison/Matrix ops ---
+  def mlx_moveaxis(_arr, _src, _dst, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_swapaxes(_arr, _ax1, _ax2, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_diagonal(_arr, _offset, _ax1, _ax2, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_diag(_arr, _k, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_roll(_arr, _shift, _axes, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_unflatten(_arr, _axis, _shape, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_as_strided(_arr, _shape, _strides, _offset, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_identity(_n, _dtype, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_tri(_n, _m, _k, _dtype, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_topk(_arr, _k, _axis, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_partition(_arr, _kth, _axis, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_argpartition(_arr, _kth, _axis, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_put_along_axis(_arr, _indices, _values, _axis, _stream),
+    do: :erlang.nif_error(:not_loaded)
+
+  def mlx_allclose(_a, _b, _rtol, _atol, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_isclose(_a, _b, _rtol, _atol, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_array_equal(_a, _b, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_nan_to_num(_arr, _nan, _posinf, _neginf, _stream), do: :erlang.nif_error(:not_loaded)
+
+  def mlx_number_of_elements(_arr, _axes, _inverted, _dtype, _stream),
+    do: :erlang.nif_error(:not_loaded)
+
+  def mlx_softmax(_arr, _axes, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_tensordot(_a, _b, _axes_a, _axes_b, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_addmm(_c, _a, _b, _alpha, _beta, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_trace(_arr, _offset, _ax1, _ax2, _dtype, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_einsum(_subscripts, _operands, _stream), do: :erlang.nif_error(:not_loaded)
+
+  def mlx_block_masked_mm(_a, _b, _block_size, _mask_out, _mask_lhs, _mask_rhs, _stream),
+    do: :erlang.nif_error(:not_loaded)
+
   # --- Convolution ---
   def mlx_conv_general(
         _input,
@@ -178,6 +249,90 @@ defmodule Mlx.NIF do
 
   # --- Split (for to_batched) ---
   def mlx_split_equal_parts(_arr, _num_splits, _axis, _stream), do: :erlang.nif_error(:not_loaded)
+
+  # --- Wave 2: Random ops ---
+  def mlx_random_key(_seed), do: :erlang.nif_error(:not_loaded)
+  def mlx_random_seed(_seed), do: :erlang.nif_error(:not_loaded)
+  def mlx_random_split(_key, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_random_split_num(_key, _num, _stream), do: :erlang.nif_error(:not_loaded)
+
+  def mlx_random_uniform(_low, _high, _shape, _dtype, _key_or_nil, _stream),
+    do: :erlang.nif_error(:not_loaded)
+
+  def mlx_random_normal(_shape, _dtype, _loc, _scale, _key_or_nil, _stream),
+    do: :erlang.nif_error(:not_loaded)
+
+  def mlx_random_bernoulli(_p, _shape, _key_or_nil, _stream),
+    do: :erlang.nif_error(:not_loaded)
+
+  def mlx_random_randint(_low, _high, _shape, _dtype, _key_or_nil, _stream),
+    do: :erlang.nif_error(:not_loaded)
+
+  def mlx_random_truncated_normal(_lower, _upper, _shape, _dtype, _key_or_nil, _stream),
+    do: :erlang.nif_error(:not_loaded)
+
+  def mlx_random_categorical(_logits, _axis, _key_or_nil, _stream),
+    do: :erlang.nif_error(:not_loaded)
+
+  def mlx_random_gumbel(_shape, _dtype, _key_or_nil, _stream),
+    do: :erlang.nif_error(:not_loaded)
+
+  def mlx_random_laplace(_shape, _dtype, _loc, _scale, _key_or_nil, _stream),
+    do: :erlang.nif_error(:not_loaded)
+
+  # --- Wave 3: Linear Algebra ops ---
+  def mlx_linalg_inv(_a, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_linalg_pinv(_a, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_linalg_cholesky(_a, _upper, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_linalg_cholesky_inv(_a, _upper, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_linalg_qr(_a, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_linalg_svd(_a, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_linalg_eigh(_a, _uplo, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_linalg_eigvalsh(_a, _uplo, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_linalg_lu(_a, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_linalg_lu_factor(_a, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_linalg_solve(_a, _b, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_linalg_solve_triangular(_a, _b, _upper, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_linalg_cross(_a, _b, _axis, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_linalg_tri_inv(_a, _upper, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_linalg_norm(_a, _axes, _keepdims, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_linalg_norm_p(_a, _ord, _axes, _keepdims, _stream), do: :erlang.nif_error(:not_loaded)
+
+  # --- Wave 4: FFT expansion ---
+  def mlx_rfft(_arr, _n, _axis, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_irfft(_arr, _n, _axis, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_fft2(_arr, _n_list, _axes_list, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_fftn(_arr, _n_list, _axes_list, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_ifft2(_arr, _n_list, _axes_list, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_ifftn(_arr, _n_list, _axes_list, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_rfft2(_arr, _n_list, _axes_list, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_rfftn(_arr, _n_list, _axes_list, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_irfft2(_arr, _n_list, _axes_list, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_irfftn(_arr, _n_list, _axes_list, _stream), do: :erlang.nif_error(:not_loaded)
+
+  # --- Wave 5: Quantization ---
+  def mlx_quantize(_w, _group_size, _bits, _stream), do: :erlang.nif_error(:not_loaded)
+
+  def mlx_dequantize(_w, _scales, _biases, _group_size, _bits, _stream),
+    do: :erlang.nif_error(:not_loaded)
+
+  def mlx_quantized_matmul(_x, _w, _scales, _biases, _transpose, _group_size, _bits, _stream),
+    do: :erlang.nif_error(:not_loaded)
+
+  # --- Wave 6: Fast ops ---
+  def mlx_fast_layer_norm(_x, _weight, _bias, _eps, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_fast_rms_norm(_x, _weight, _eps, _stream), do: :erlang.nif_error(:not_loaded)
+
+  def mlx_fast_rope(_x, _dims, _traditional, _base, _scale, _offset, _freqs, _stream),
+    do: :erlang.nif_error(:not_loaded)
+
+  def mlx_fast_sdpa(_q, _k, _v, _scale, _mask, _stream), do: :erlang.nif_error(:not_loaded)
+
+  # --- I/O ---
+  def mlx_save(_path, _arr), do: :erlang.nif_error(:not_loaded)
+  def mlx_load(_path, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_save_safetensors(_path, _keys, _arrays, _meta_keys, _meta_vals), do: :erlang.nif_error(:not_loaded)
+  def mlx_load_safetensors(_path, _stream), do: :erlang.nif_error(:not_loaded)
 
   # --- Device / Stream ---
   def default_cpu_stream, do: :erlang.nif_error(:not_loaded)

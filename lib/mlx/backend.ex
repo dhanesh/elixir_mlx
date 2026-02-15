@@ -46,6 +46,18 @@ defmodule Mlx.Backend do
 
   defp s, do: default_stream()
 
+  # CPU stream for linalg ops (many are CPU-only in MLX)
+  @cpu_stream_key {__MODULE__, :cpu_stream}
+  defp cpu_s do
+    case Process.get(@cpu_stream_key) do
+      nil ->
+        {:ok, stream} = Mlx.NIF.default_cpu_stream()
+        Process.put(@cpu_stream_key, stream)
+        stream
+      stream -> stream
+    end
+  end
+
   defp mlx_dtype(%Nx.Tensor{type: type}), do: Mlx.Dtype.to_mlx(type)
 
   # --- Nx.Backend callbacks ---
@@ -156,7 +168,7 @@ defmodule Mlx.Backend do
     {:log, :mlx_log},
     {:log1p, :mlx_log1p},
     {:sqrt, :mlx_sqrt},
-    {:rsqrt, nil},
+    {:rsqrt, :mlx_rsqrt},
     {:sin, :mlx_sin},
     {:cos, :mlx_cos},
     {:tan, :mlx_tan},
@@ -191,15 +203,6 @@ defmodule Mlx.Backend do
   def sigmoid(out, tensor) do
     ref = from_ref(tensor)
     result = unwrap!(Mlx.NIF.mlx_sigmoid(ref, s()))
-    to_nx(out, result)
-  end
-
-  # rsqrt = reciprocal(sqrt(x))
-  @impl true
-  def rsqrt(out, tensor) do
-    ref = from_ref(tensor)
-    sq = unwrap!(Mlx.NIF.mlx_sqrt(ref, s()))
-    result = unwrap!(Mlx.NIF.mlx_reciprocal(sq, s()))
     to_nx(out, result)
   end
 
@@ -251,14 +254,12 @@ defmodule Mlx.Backend do
     end
   end
 
-  # remainder: a - floor_divide(a, b) * b
+  # remainder: native mlx_remainder
   @impl true
   def remainder(out, left, right) do
     l = from_ref(left)
     r = from_ref(right)
-    fd = unwrap!(Mlx.NIF.mlx_floor_divide(l, r, s()))
-    prod = unwrap!(Mlx.NIF.mlx_multiply(fd, r, s()))
-    result = unwrap!(Mlx.NIF.mlx_subtract(l, prod, s()))
+    result = unwrap!(Mlx.NIF.mlx_remainder(l, r, s()))
     to_nx(out, result)
   end
 
@@ -502,11 +503,118 @@ defmodule Mlx.Backend do
     to_nx(out, result)
   end
 
-  # --- Triangular ---
+  # --- Linear Algebra (Nx.Backend callbacks) ---
+  # Many MLX linalg ops are CPU-only (no Metal kernels), so we use cpu_s().
 
   @impl true
-  def triangular_solve(_out, _a, _b, _opts) do
-    raise "triangular_solve not yet implemented in Mlx.Backend"
+  def triangular_solve(%Nx.Tensor{} = out, %Nx.Tensor{} = a, %Nx.Tensor{} = b, opts) do
+    lower = Keyword.get(opts, :lower, true)
+    left_side = Keyword.get(opts, :left_side, true)
+    transform_a = Keyword.get(opts, :transform_a, :none)
+
+    a_ref = from_ref(a)
+
+    # Handle transform_a: transpose A and flip upper/lower
+    {a_ref, upper} =
+      case transform_a do
+        :none ->
+          {a_ref, !lower}
+
+        :transpose ->
+          transposed = unwrap!(Mlx.NIF.mlx_transpose(a_ref, [1, 0], cpu_s()))
+          {transposed, lower}
+      end
+
+    if left_side do
+      b_ref = from_ref(b)
+      result = unwrap!(Mlx.NIF.mlx_linalg_solve_triangular(a_ref, b_ref, upper, cpu_s()))
+      to_nx(out, result)
+    else
+      # Solve X @ A = B → transpose: A^T @ X^T = B^T
+      b_ref = from_ref(b)
+      b_ndim = tuple_size(b.shape)
+      a_ndim = tuple_size(a.shape)
+      b_perm = swap_last_two(b_ndim)
+      a_perm = swap_last_two(a_ndim)
+
+      bt = unwrap!(Mlx.NIF.mlx_transpose(b_ref, b_perm, cpu_s()))
+      at = unwrap!(Mlx.NIF.mlx_transpose(a_ref, a_perm, cpu_s()))
+      xt = unwrap!(Mlx.NIF.mlx_linalg_solve_triangular(at, bt, !upper, cpu_s()))
+      result = unwrap!(Mlx.NIF.mlx_transpose(xt, b_perm, cpu_s()))
+      to_nx(out, result)
+    end
+  end
+
+  # Swap last two axes: [0, 1, ..., n-2, n-1] → [0, 1, ..., n-1, n-2]
+  defp swap_last_two(ndim) when ndim >= 2 do
+    axes = Enum.to_list(0..(ndim - 1))
+    List.update_at(axes, ndim - 2, fn _ -> ndim - 1 end)
+    |> List.update_at(ndim - 1, fn _ -> ndim - 2 end)
+  end
+
+  # Convert MLX pivot indices (uint32 1D) to a permutation matrix (float 2D)
+  defp pivots_to_perm_matrix(pivots_ref, p_out, _stream) do
+    Mlx.NIF.eval(pivots_ref)
+    {:ok, bin} = Mlx.NIF.to_binary(pivots_ref)
+    indices = for <<i::native-unsigned-32 <- bin>>, do: i
+    n = length(indices)
+    mlx_type = Mlx.Dtype.to_mlx(p_out.type)
+
+    # Build permutation matrix: P[i, pivots[i]] = 1.0
+    rows =
+      Enum.map(indices, fn pivot_col ->
+        row = List.duplicate(0.0, n)
+        List.replace_at(row, pivot_col, 1.0)
+      end)
+
+    flat = List.flatten(rows)
+    bin_out = for v <- flat, into: <<>>, do: <<v::native-float-32>>
+    unwrap!(Mlx.NIF.from_binary(bin_out, [n, n], mlx_type))
+  end
+
+  @impl true
+  def qr({%Nx.Tensor{} = q_out, %Nx.Tensor{} = r_out}, %Nx.Tensor{} = tensor, _opts) do
+    ref = from_ref(tensor)
+    {q_ref, r_ref} = unwrap!(Mlx.NIF.mlx_linalg_qr(ref, cpu_s()))
+    {to_nx(q_out, q_ref), to_nx(r_out, r_ref)}
+  end
+
+  @impl true
+  def cholesky(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor) do
+    ref = from_ref(tensor)
+    result = unwrap!(Mlx.NIF.mlx_linalg_cholesky(ref, false, cpu_s()))
+    to_nx(out, result)
+  end
+
+  @impl true
+  def lu({%Nx.Tensor{} = p_out, %Nx.Tensor{} = l_out, %Nx.Tensor{} = u_out}, %Nx.Tensor{} = tensor, _opts) do
+    ref = from_ref(tensor)
+    [pivots_ref, l_ref, u_ref] = unwrap!(Mlx.NIF.mlx_linalg_lu(ref, cpu_s()))
+    # MLX returns pivot indices (uint32 1D), Nx expects a permutation matrix (float 2D)
+    p_ref = pivots_to_perm_matrix(pivots_ref, p_out, cpu_s())
+    {to_nx(p_out, p_ref), to_nx(l_out, l_ref), to_nx(u_out, u_ref)}
+  end
+
+  @impl true
+  def eigh({%Nx.Tensor{} = eigenvals_out, %Nx.Tensor{} = eigenvecs_out}, %Nx.Tensor{} = tensor, _opts) do
+    ref = from_ref(tensor)
+    {ev_ref, evec_ref} = unwrap!(Mlx.NIF.mlx_linalg_eigh(ref, :L, cpu_s()))
+    {to_nx(eigenvals_out, ev_ref), to_nx(eigenvecs_out, evec_ref)}
+  end
+
+  @impl true
+  def solve(%Nx.Tensor{} = out, %Nx.Tensor{} = a, %Nx.Tensor{} = b) do
+    a_ref = from_ref(a)
+    b_ref = from_ref(b)
+    result = unwrap!(Mlx.NIF.mlx_linalg_solve(a_ref, b_ref, cpu_s()))
+    to_nx(out, result)
+  end
+
+  @impl true
+  def svd({%Nx.Tensor{} = u_out, %Nx.Tensor{} = s_out, %Nx.Tensor{} = vt_out}, %Nx.Tensor{} = tensor, _opts) do
+    ref = from_ref(tensor)
+    [u_ref, s_ref, vt_ref] = unwrap!(Mlx.NIF.mlx_linalg_svd(ref, cpu_s()))
+    {to_nx(u_out, u_ref), to_nx(s_out, s_ref), to_nx(vt_out, vt_ref)}
   end
 
   # --- Pad ---
@@ -1029,39 +1137,209 @@ defmodule Mlx.Backend do
     end
   end
 
+  # --- Cumulative ops ---
+
+  @impl true
+  def cumulative_sum(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor, opts) do
+    cumulative_op(:mlx_cumsum, out, tensor, opts)
+  end
+
+  @impl true
+  def cumulative_product(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor, opts) do
+    cumulative_op(:mlx_cumprod, out, tensor, opts)
+  end
+
+  @impl true
+  def cumulative_max(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor, opts) do
+    cumulative_op(:mlx_cummax, out, tensor, opts)
+  end
+
+  @impl true
+  def cumulative_min(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor, opts) do
+    cumulative_op(:mlx_cummin, out, tensor, opts)
+  end
+
+  defp cumulative_op(nif_fn, out, tensor, opts) do
+    axis = opts[:axis]
+    reverse = if(opts[:reverse], do: true, else: false)
+    # Nx cumulative ops are always inclusive
+    inclusive = true
+    ref = from_ref(tensor)
+    result = unwrap!(apply(Mlx.NIF, nif_fn, [ref, axis, reverse, inclusive, s()]))
+    to_nx(out, result)
+  end
+
   # --- Not yet implemented callbacks ---
   # These raise clear errors instead of generating compiler warnings.
 
-  @not_implemented_ops ~w(
+  # Ops permanently unsupported (no mlx-c equivalent)
+  @unsupported_ops ~w(
     count_leading_zeros from_pointer population_count reduce to_pointer
-    window_max window_min window_product window_reduce
-    window_scatter_max window_scatter_min window_sum
   )a
 
-  for op <- @not_implemented_ops do
+  for op <- @unsupported_ops do
     arity =
       case op do
-        op when op in [:to_pointer, :count_leading_zeros, :population_count] ->
-          2
-
-        op when op in [:window_max, :window_min, :window_product, :window_sum] ->
-          4
-
-        op when op in [:from_pointer, :reduce] ->
-          5
-
-        op when op in [:window_reduce, :window_scatter_max, :window_scatter_min] ->
-          6
-
-        _ ->
-          3
+        op when op in [:to_pointer, :count_leading_zeros, :population_count] -> 2
+        op when op in [:from_pointer, :reduce] -> 5
+        _ -> 3
       end
 
     args = Macro.generate_arguments(arity, __MODULE__)
 
     @impl true
     def unquote(op)(unquote_splicing(args)) do
-      raise ArgumentError, "#{unquote(op)} is not yet implemented in Mlx.Backend"
+      raise ArgumentError, "#{unquote(op)} is not supported by Mlx.Backend (no mlx-c equivalent)"
+    end
+  end
+
+  # Window ops — implemented via as_strided + reductions
+
+  @impl true
+  def window_sum(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor, window_dimensions, opts) do
+    window_reduce_impl(out, tensor, window_dimensions, opts, :sum)
+  end
+
+  @impl true
+  def window_max(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor, window_dimensions, opts) do
+    window_reduce_impl(out, tensor, window_dimensions, opts, :max)
+  end
+
+  @impl true
+  def window_min(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor, window_dimensions, opts) do
+    window_reduce_impl(out, tensor, window_dimensions, opts, :min)
+  end
+
+  @impl true
+  def window_product(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor, window_dimensions, opts) do
+    window_reduce_impl(out, tensor, window_dimensions, opts, :product)
+  end
+
+  defp window_reduce_impl(out, tensor, window_dimensions, opts, op) do
+    padding = opts[:padding]
+    strides = opts[:strides]
+    window_dilations = opts[:window_dilations]
+    type = tensor.type
+
+    ref = from_ref(tensor)
+    ndim = tuple_size(tensor.shape)
+    win_dims = Tuple.to_list(window_dimensions)
+
+    # Use CPU stream: GPU reduction on non-contiguous as_strided views
+    # produces wrong results (mlx-c v0.1.2 contiguity bug)
+    stream = cpu_s()
+
+    # Step 1: Pad the input with appropriate identity value
+    pad_ref = window_pad_ref(op, type)
+    needs_padding = Enum.any?(padding, fn {lo, hi} -> lo > 0 or hi > 0 end)
+
+    padded_ref =
+      if needs_padding do
+        axes = Enum.to_list(0..(ndim - 1))
+        low_pads = Enum.map(padding, fn {lo, _hi} -> lo end)
+        high_pads = Enum.map(padding, fn {_lo, hi} -> hi end)
+        unwrap!(Mlx.NIF.mlx_pad(ref, axes, low_pads, high_pads, pad_ref, stream))
+      else
+        ref
+      end
+
+    # Compute padded shape
+    padded_shape =
+      for i <- 0..(ndim - 1) do
+        {lo, hi} = Enum.at(padding, i)
+        elem(tensor.shape, i) + lo + hi
+      end
+
+    # Step 2: Compute as_strided shape and strides
+    elem_strides = compute_elem_strides(padded_shape)
+
+    # Effective window size accounting for dilation
+    effective_win =
+      Enum.zip(win_dims, window_dilations)
+      |> Enum.map(fn {w, d} -> (w - 1) * d + 1 end)
+
+    # Output dimensions
+    out_dims =
+      for i <- 0..(ndim - 1) do
+        div(Enum.at(padded_shape, i) - Enum.at(effective_win, i), Enum.at(strides, i)) + 1
+      end
+
+    # as_strided shape: [out_dims..., win_dims...]
+    strided_shape = out_dims ++ win_dims
+
+    # as_strided strides: [elem_stride*pool_stride..., elem_stride*dilation...]
+    out_strides =
+      for i <- 0..(ndim - 1) do
+        Enum.at(elem_strides, i) * Enum.at(strides, i)
+      end
+
+    win_strides =
+      for i <- 0..(ndim - 1) do
+        Enum.at(elem_strides, i) * Enum.at(window_dilations, i)
+      end
+
+    strided_strides = out_strides ++ win_strides
+
+    strided_ref =
+      unwrap!(Mlx.NIF.mlx_as_strided(padded_ref, strided_shape, strided_strides, 0, stream))
+
+    # Step 3: Reduce over window dimensions (last ndim axes)
+    reduce_axes = Enum.to_list(ndim..(2 * ndim - 1))
+
+    reduced_ref =
+      case op do
+        :sum -> unwrap!(Mlx.NIF.mlx_sum(strided_ref, reduce_axes, false, stream))
+        :max -> unwrap!(Mlx.NIF.mlx_max(strided_ref, reduce_axes, false, stream))
+        :min -> unwrap!(Mlx.NIF.mlx_min(strided_ref, reduce_axes, false, stream))
+        :product -> unwrap!(Mlx.NIF.mlx_prod(strided_ref, reduce_axes, false, stream))
+      end
+
+    to_nx(out, reduced_ref)
+  end
+
+  defp compute_elem_strides(shape) do
+    # Row-major (C-contiguous) strides in elements, computed from right
+    shape
+    |> Enum.reverse()
+    |> Enum.reduce({[], 1}, fn dim, {strides, acc} ->
+      {[acc | strides], acc * dim}
+    end)
+    |> elem(0)
+  end
+
+  defp window_pad_ref(:sum, type) do
+    from_ref(Nx.tensor(0, type: type))
+  end
+
+  defp window_pad_ref(:product, type) do
+    from_ref(Nx.tensor(1, type: type))
+  end
+
+  defp window_pad_ref(:max, type) do
+    # Use type min binary for negative infinity / min integer value
+    binary = Nx.Type.min_binary(type)
+    unwrap!(Mlx.NIF.from_binary(binary, [], Mlx.Dtype.to_mlx(type)))
+  end
+
+  defp window_pad_ref(:min, type) do
+    # Use type max binary for positive infinity / max integer value
+    binary = Nx.Type.max_binary(type)
+    unwrap!(Mlx.NIF.from_binary(binary, [], Mlx.Dtype.to_mlx(type)))
+  end
+
+  # Window ops that require user-defined functions — not supported in mlx-c
+  @window_custom_ops ~w(
+    window_reduce window_scatter_max window_scatter_min
+  )a
+
+  for op <- @window_custom_ops do
+    arity = 6
+
+    args = Macro.generate_arguments(arity, __MODULE__)
+
+    @impl true
+    def unquote(op)(unquote_splicing(args)) do
+      raise ArgumentError, "#{unquote(op)} is not supported by Mlx.Backend (requires user-defined functions)"
     end
   end
 end

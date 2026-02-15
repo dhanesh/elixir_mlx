@@ -7,6 +7,7 @@
 
 #include <erl_nif.h>
 #include <mlx/c/mlx.h>
+#include <mlx/c/optional.h>
 
 // --- Resource Types ---
 // Each mlx-c object type gets a corresponding Erlang resource type

@@ -903,6 +903,44 @@ defmodule MlxTest do
     end
   end
 
+  describe "cumulative ops" do
+    test "cumulative_sum" do
+      t = Nx.tensor([1.0, 2.0, 3.0, 4.0])
+      result = Nx.cumulative_sum(t)
+      assert Nx.to_flat_list(result) == [1.0, 3.0, 6.0, 10.0]
+    end
+
+    test "cumulative_sum along axis" do
+      t = Nx.tensor([[1.0, 2.0], [3.0, 4.0]])
+      result = Nx.cumulative_sum(t, axis: 0)
+      assert Nx.to_flat_list(result) == [1.0, 2.0, 4.0, 6.0]
+    end
+
+    test "cumulative_sum reverse" do
+      t = Nx.tensor([1.0, 2.0, 3.0, 4.0])
+      result = Nx.cumulative_sum(t, reverse: true)
+      assert Nx.to_flat_list(result) == [10.0, 9.0, 7.0, 4.0]
+    end
+
+    test "cumulative_product" do
+      t = Nx.tensor([1.0, 2.0, 3.0, 4.0])
+      result = Nx.cumulative_product(t)
+      assert Nx.to_flat_list(result) == [1.0, 2.0, 6.0, 24.0]
+    end
+
+    test "cumulative_max" do
+      t = Nx.tensor([3.0, 1.0, 4.0, 1.0, 5.0])
+      result = Nx.cumulative_max(t)
+      assert Nx.to_flat_list(result) == [3.0, 3.0, 4.0, 4.0, 5.0]
+    end
+
+    test "cumulative_min" do
+      t = Nx.tensor([3.0, 1.0, 4.0, 1.0, 5.0])
+      result = Nx.cumulative_min(t)
+      assert Nx.to_flat_list(result) == [3.0, 1.0, 1.0, 1.0, 1.0]
+    end
+  end
+
   # Helper to assert tensors are close
   defp assert_all_close(left, right, opts \\ []) do
     atol = Keyword.get(opts, :atol, 1.0e-5)
