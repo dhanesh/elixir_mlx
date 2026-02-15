@@ -108,7 +108,7 @@
       },
       {
         "id": "RT-5",
-        "status": "PARTIAL",
+        "status": "SATISFIED",
         "maps_to": ["B2", "U2"]
       },
       {
@@ -262,6 +262,42 @@
         "type": "test",
         "validates": ["B1", "T4", "T6"],
         "status": "generated"
+      },
+      {
+        "path": "lib/mlx/nn.ex",
+        "type": "code",
+        "satisfies": ["B1", "U2"],
+        "status": "generated"
+      },
+      {
+        "path": "test/mlx/nn_test.exs",
+        "type": "test",
+        "validates": ["B1", "T4"],
+        "status": "generated"
+      },
+      {
+        "path": "test/mlx/error_quality_test.exs",
+        "type": "test",
+        "validates": ["U3", "RT-4"],
+        "status": "generated"
+      },
+      {
+        "path": "test/mlx/python_comparison_test.exs",
+        "type": "test",
+        "validates": ["T4", "B1"],
+        "status": "generated"
+      },
+      {
+        "path": "test/fixtures/python_refs/references.json",
+        "type": "test",
+        "validates": ["T4"],
+        "status": "generated"
+      },
+      {
+        "path": "test/scripts/generate_references.py",
+        "type": "test",
+        "validates": ["T4"],
+        "status": "generated"
       }
     ],
     "coverage": {
@@ -383,6 +419,12 @@
       "phase": "verify",
       "timestamp": "2026-02-17T00:00:00Z",
       "result": "Post-transforms implementation. Mlx.Transforms module added with grad, value_and_grad, vjp, jvp, vmap via closure bridge pattern (C trampoline + helper process + mutex/cond). 3 phases: Nx.Defn.grad through compiler (27 tests), MLX-native transforms (11 tests), vmap (5 tests). New artifacts: lib/mlx/transforms.ex, test/mlx/transforms_test.exs. 5th resource type: closure_bridge. 350 tests, 0 failures. 9/9 invariants (100%), 2/2 boundaries (100%), 4/6 goals SATISFIED (O1 upgraded), 2/6 PARTIAL. B1 gap narrowed: function transforms complete, only nn layers remain."
+    },
+    {
+      "number": 15,
+      "phase": "verify",
+      "timestamp": "2026-02-17T06:00:00Z",
+      "result": "G14+G15+G16 resolved. Mlx.NN module (13 activations, 5 losses, 3 functional layers, 4 re-exports). 44 Python MLX comparison tests via pre-generated JSON fixtures. 11 error message quality tests with content assertions. 438 tests, 0 failures (up from 350). 9/9 invariants (100%), 2/2 boundaries (100%), 6/7 goals SATISFIED, 1/7 PARTIAL (O3: Hex publish). Only G17 remains."
     }
   ],
   "convergence": {

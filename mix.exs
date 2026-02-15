@@ -52,7 +52,8 @@ defmodule ElixirMlx.MixProject do
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:axon, "~> 0.8", only: :test},
       {:polaris, "~> 0.1", only: :test},
-      {:scholar, "~> 0.4", only: :test}
+      {:scholar, "~> 0.4", only: :test},
+      {:jason, "~> 1.4", only: :test}
     ]
   end
 
@@ -67,7 +68,7 @@ defmodule ElixirMlx.MixProject do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url},
-      files: ~w(lib c_src mix.exs Makefile README.md CHANGELOG.md LICENSE checksum-elixir_mlx.exs)
+      files: ~w(lib c_src/mlx_nif.c c_src/mlx_nif.h mix.exs Makefile README.md CHANGELOG.md LICENSE checksum-elixir_mlx.exs)
     ]
   end
 
