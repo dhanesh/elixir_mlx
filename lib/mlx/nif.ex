@@ -341,4 +341,12 @@ defmodule Mlx.NIF do
   def set_default_device(_device), do: :erlang.nif_error(:not_loaded)
   def device_new(_type), do: :erlang.nif_error(:not_loaded)
   def synchronize(_stream), do: :erlang.nif_error(:not_loaded)
+
+  # --- Wave 9: Function transforms (closure bridge) ---
+  def closure_respond(_bridge_ref, _array_ref_list), do: :erlang.nif_error(:not_loaded)
+  def closure_respond_error(_bridge_ref), do: :erlang.nif_error(:not_loaded)
+  def value_and_grad_apply(_helper_pid, _inputs, _argnums), do: :erlang.nif_error(:not_loaded)
+  def vjp_apply(_helper_pid, _primals, _cotangents), do: :erlang.nif_error(:not_loaded)
+  def jvp_apply(_helper_pid, _primals, _tangents), do: :erlang.nif_error(:not_loaded)
+  def vmap_apply(_helper_pid, _inputs, _in_axes, _out_axes), do: :erlang.nif_error(:not_loaded)
 end

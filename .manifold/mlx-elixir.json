@@ -250,6 +250,18 @@
         "type": "ops",
         "satisfies": ["O3", "RT-9"],
         "status": "generated"
+      },
+      {
+        "path": "lib/mlx/transforms.ex",
+        "type": "code",
+        "satisfies": ["B1", "T6", "U2"],
+        "status": "generated"
+      },
+      {
+        "path": "test/mlx/transforms_test.exs",
+        "type": "test",
+        "validates": ["B1", "T4", "T6"],
+        "status": "generated"
       }
     ],
     "coverage": {
@@ -365,6 +377,12 @@
       "phase": "verify",
       "timestamp": "2026-02-16T18:00:00Z",
       "result": "Post mlx-c v0.5.0 upgrade verification. Upgraded from v0.1.2 to v0.5.0 (~40 API renames, SDPA/quantize mode fixes). Metal thread safety: all ExUnit modules async:false, safety_test.exs parallel tests converted to sequential. 319 tests, 0 failures. No regressions. 9/9 invariants (100%), 2/2 boundaries (100%), 3/6 goals SATISFIED, 3/6 PARTIAL. B1 gap note updated: mlx_func in v0.5.0 unblocks nn/transforms for future work."
+    },
+    {
+      "number": 14,
+      "phase": "verify",
+      "timestamp": "2026-02-17T00:00:00Z",
+      "result": "Post-transforms implementation. Mlx.Transforms module added with grad, value_and_grad, vjp, jvp, vmap via closure bridge pattern (C trampoline + helper process + mutex/cond). 3 phases: Nx.Defn.grad through compiler (27 tests), MLX-native transforms (11 tests), vmap (5 tests). New artifacts: lib/mlx/transforms.ex, test/mlx/transforms_test.exs. 5th resource type: closure_bridge. 350 tests, 0 failures. 9/9 invariants (100%), 2/2 boundaries (100%), 4/6 goals SATISFIED (O1 upgraded), 2/6 PARTIAL. B1 gap narrowed: function transforms complete, only nn layers remain."
     }
   ],
   "convergence": {

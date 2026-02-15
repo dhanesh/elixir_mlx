@@ -3259,6 +3259,664 @@ static ERL_NIF_TERM nif_load_safetensors(ErlNifEnv* env, int argc, const ERL_NIF
 }
 
 // ============================================================
+// Closure Bridge: Trampoline pattern for Elixir ↔ MLX transforms
+// ============================================================
+
+ErlNifResourceType *MLX_CLOSURE_BRIDGE_RESOURCE = NULL;
+
+static void closure_bridge_destructor(ErlNifEnv* env, void* obj) {
+    (void)env;
+    ClosureBridgePayload *bridge = (ClosureBridgePayload*)obj;
+    if (bridge->mutex) {
+        enif_mutex_destroy(bridge->mutex);
+        bridge->mutex = NULL;
+    }
+    if (bridge->cond) {
+        enif_cond_destroy(bridge->cond);
+        bridge->cond = NULL;
+    }
+    if (bridge->msg_env) {
+        enif_free_env(bridge->msg_env);
+        bridge->msg_env = NULL;
+    }
+    if (bridge->result.ctx) {
+        mlx_vector_array_free(bridge->result);
+        bridge->result.ctx = NULL;
+    }
+}
+
+// Trampoline function called by MLX during transforms (e.g. value_and_grad).
+// Sends inputs to the Elixir helper process, then blocks waiting for results.
+static int closure_trampoline(mlx_vector_array *out, const mlx_vector_array in, void *payload) {
+    ClosureBridgePayload *bridge = (ClosureBridgePayload *)payload;
+
+    // Build list of array refs to send to the helper process
+    size_t n = mlx_vector_array_size(in);
+    ErlNifEnv *msg_env = bridge->msg_env;
+    enif_clear_env(msg_env);
+
+    // Build a list of array resource terms for the inputs
+    ERL_NIF_TERM list = enif_make_list(msg_env, 0);
+    // Build in reverse order, then the list will be reversed
+    for (int i = (int)n - 1; i >= 0; i--) {
+        mlx_array elem = mlx_array_new();
+        if (mlx_vector_array_get(&elem, in, (size_t)i) != 0) {
+            mlx_array_free(elem);
+            return 1;
+        }
+        // Copy the array so it persists after the vector is freed
+        mlx_array copy = mlx_array_new();
+        mlx_array_set(&copy, elem);
+        mlx_array_free(elem);
+
+        MlxArrayResource *res = enif_alloc_resource(MLX_ARRAY_RESOURCE, sizeof(MlxArrayResource));
+        res->inner = copy;
+        ERL_NIF_TERM term = enif_make_resource(msg_env, res);
+        enif_release_resource(res);
+        list = enif_make_list_cell(msg_env, term, list);
+    }
+
+    // Send {:trampoline_call, bridge_ref, [array_refs...]} to helper
+    ERL_NIF_TERM bridge_ref = enif_make_resource(msg_env, bridge);
+    ERL_NIF_TERM atom_call = enif_make_atom(msg_env, "trampoline_call");
+    ERL_NIF_TERM msg = enif_make_tuple3(msg_env, atom_call, bridge_ref, list);
+
+    if (!enif_send(NULL, &bridge->helper_pid, msg_env, msg)) {
+        return 1;
+    }
+
+    // Block until the helper responds
+    enif_mutex_lock(bridge->mutex);
+    while (!bridge->ready && !bridge->error) {
+        enif_cond_wait(bridge->cond, bridge->mutex);
+    }
+    int err = bridge->error;
+    bridge->ready = 0;
+
+    if (!err && bridge->result.ctx) {
+        mlx_vector_array_set(out, bridge->result);
+    }
+    enif_mutex_unlock(bridge->mutex);
+
+    return err;
+}
+
+// Destructor for the closure payload (called by mlx_closure_free)
+static void closure_payload_dtor(void *payload) {
+    // The bridge resource is ref-counted by Erlang; don't free it here.
+    // The ClosureBridgePayload destructor handles cleanup when GC'd.
+    (void)payload;
+}
+
+// NIF: closure_respond(bridge_ref, array_ref_list)
+// Called by the helper process to return results to the blocked trampoline.
+static ERL_NIF_TERM nif_closure_respond(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc;
+    ClosureBridgePayload *bridge;
+    if (!enif_get_resource(env, argv[0], MLX_CLOSURE_BRIDGE_RESOURCE, (void**)&bridge))
+        return enif_make_badarg(env);
+
+    // Parse list of array refs into a vector_array
+    unsigned int len;
+    if (!enif_get_list_length(env, argv[1], &len))
+        return enif_make_badarg(env);
+
+    mlx_vector_array result = mlx_vector_array_new();
+    if (!result.ctx) return MLX_NIF_ERROR(env, "failed to create vector_array");
+
+    ERL_NIF_TERM head, tail = argv[1];
+    for (unsigned int i = 0; i < len; i++) {
+        if (!enif_get_list_cell(env, tail, &head, &tail)) {
+            mlx_vector_array_free(result);
+            return enif_make_badarg(env);
+        }
+        MlxArrayResource *arr;
+        if (!enif_get_resource(env, head, MLX_ARRAY_RESOURCE, (void**)&arr)) {
+            mlx_vector_array_free(result);
+            return enif_make_badarg(env);
+        }
+        mlx_vector_array_append_value(result, arr->inner);
+    }
+
+    // Signal the trampoline
+    enif_mutex_lock(bridge->mutex);
+    if (bridge->result.ctx) mlx_vector_array_free(bridge->result);
+    bridge->result = result;
+    bridge->ready = 1;
+    bridge->error = 0;
+    enif_cond_signal(bridge->cond);
+    enif_mutex_unlock(bridge->mutex);
+
+    return ATOM_OK;
+}
+
+// NIF: closure_respond_error(bridge_ref)
+// Called by the helper process to signal an error to the blocked trampoline.
+static ERL_NIF_TERM nif_closure_respond_error(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc;
+    ClosureBridgePayload *bridge;
+    if (!enif_get_resource(env, argv[0], MLX_CLOSURE_BRIDGE_RESOURCE, (void**)&bridge))
+        return enif_make_badarg(env);
+
+    enif_mutex_lock(bridge->mutex);
+    bridge->error = 1;
+    bridge->ready = 0;
+    enif_cond_signal(bridge->cond);
+    enif_mutex_unlock(bridge->mutex);
+
+    return ATOM_OK;
+}
+
+// NIF: value_and_grad_apply(helper_pid, array_ref_list, argnums_list)
+// Runs on dirty scheduler. Creates closure bridge, wraps Elixir function,
+// calls mlx_value_and_grad, then mlx_closure_value_and_grad_apply.
+static ERL_NIF_TERM nif_value_and_grad_apply(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc;
+
+    // argv[0] = helper_pid, argv[1] = input array_ref list, argv[2] = argnums list
+    ErlNifPid helper_pid;
+    if (!enif_get_local_pid(env, argv[0], &helper_pid))
+        return MLX_NIF_ERROR(env, "expected helper pid");
+
+    // Parse input arrays
+    unsigned int input_len;
+    if (!enif_get_list_length(env, argv[1], &input_len))
+        return enif_make_badarg(env);
+
+    mlx_vector_array inputs = mlx_vector_array_new();
+    if (!inputs.ctx) return MLX_NIF_ERROR(env, "failed to create input vector");
+
+    ERL_NIF_TERM head, tail = argv[1];
+    for (unsigned int i = 0; i < input_len; i++) {
+        if (!enif_get_list_cell(env, tail, &head, &tail)) {
+            mlx_vector_array_free(inputs);
+            return enif_make_badarg(env);
+        }
+        MlxArrayResource *arr;
+        if (!enif_get_resource(env, head, MLX_ARRAY_RESOURCE, (void**)&arr)) {
+            mlx_vector_array_free(inputs);
+            return enif_make_badarg(env);
+        }
+        mlx_vector_array_append_value(inputs, arr->inner);
+    }
+
+    // Parse argnums
+    unsigned int argnums_len;
+    if (!enif_get_list_length(env, argv[2], &argnums_len))  {
+        mlx_vector_array_free(inputs);
+        return enif_make_badarg(env);
+    }
+
+    int *argnums = (int*)enif_alloc(argnums_len * sizeof(int));
+    tail = argv[2];
+    for (unsigned int i = 0; i < argnums_len; i++) {
+        if (!enif_get_list_cell(env, tail, &head, &tail) || !enif_get_int(env, head, &argnums[i])) {
+            enif_free(argnums);
+            mlx_vector_array_free(inputs);
+            return enif_make_badarg(env);
+        }
+    }
+
+    // Create closure bridge resource
+    ClosureBridgePayload *bridge = enif_alloc_resource(
+        MLX_CLOSURE_BRIDGE_RESOURCE, sizeof(ClosureBridgePayload));
+    memset(bridge, 0, sizeof(ClosureBridgePayload));
+    bridge->msg_env = enif_alloc_env();
+    bridge->helper_pid = helper_pid;
+    bridge->mutex = enif_mutex_create("closure_bridge");
+    bridge->cond = enif_cond_create("closure_bridge");
+    bridge->result.ctx = NULL;
+    bridge->ready = 0;
+    bridge->error = 0;
+
+    // Keep a reference to bridge so it won't be GC'd during the call
+    enif_keep_resource(bridge);
+
+    // Create MLX closure with our trampoline
+    mlx_closure closure = mlx_closure_new_func_payload(
+        closure_trampoline, (void*)bridge, closure_payload_dtor);
+
+    if (!closure.ctx) {
+        enif_release_resource(bridge);
+        enif_release_resource(bridge);
+        enif_free(argnums);
+        mlx_vector_array_free(inputs);
+        return MLX_NIF_ERROR(env, "failed to create closure");
+    }
+
+    // Create value_and_grad transform
+    mlx_closure_value_and_grad vag = mlx_closure_value_and_grad_new();
+    int ret = mlx_value_and_grad(&vag, closure, argnums, argnums_len);
+    enif_free(argnums);
+
+    if (ret != 0) {
+        mlx_closure_value_and_grad_free(vag);
+        mlx_closure_free(closure);
+        enif_release_resource(bridge);
+        enif_release_resource(bridge);
+        mlx_vector_array_free(inputs);
+        return MLX_NIF_ERROR(env, last_error_msg);
+    }
+
+    // Apply the transform
+    mlx_vector_array values = mlx_vector_array_new();
+    mlx_vector_array grads = mlx_vector_array_new();
+    ret = mlx_closure_value_and_grad_apply(&values, &grads, vag, inputs);
+
+    mlx_closure_value_and_grad_free(vag);
+    mlx_closure_free(closure);
+    enif_release_resource(bridge); // release the keep
+    enif_release_resource(bridge); // release the alloc
+    mlx_vector_array_free(inputs);
+
+    if (ret != 0) {
+        mlx_vector_array_free(values);
+        mlx_vector_array_free(grads);
+        return MLX_NIF_ERROR(env, last_error_msg);
+    }
+
+    // Convert values and grads to Erlang lists of array refs
+    size_t nv = mlx_vector_array_size(values);
+    size_t ng = mlx_vector_array_size(grads);
+
+    ERL_NIF_TERM values_list = enif_make_list(env, 0);
+    for (int i = (int)nv - 1; i >= 0; i--) {
+        mlx_array elem = mlx_array_new();
+        mlx_vector_array_get(&elem, values, (size_t)i);
+        mlx_array copy = mlx_array_new();
+        mlx_array_set(&copy, elem);
+        mlx_array_free(elem);
+        values_list = enif_make_list_cell(env, wrap_array_raw(env, copy), values_list);
+    }
+
+    ERL_NIF_TERM grads_list = enif_make_list(env, 0);
+    for (int i = (int)ng - 1; i >= 0; i--) {
+        mlx_array elem = mlx_array_new();
+        mlx_vector_array_get(&elem, grads, (size_t)i);
+        mlx_array copy = mlx_array_new();
+        mlx_array_set(&copy, elem);
+        mlx_array_free(elem);
+        grads_list = enif_make_list_cell(env, wrap_array_raw(env, copy), grads_list);
+    }
+
+    mlx_vector_array_free(values);
+    mlx_vector_array_free(grads);
+
+    return MLX_NIF_OK(env, enif_make_tuple2(env, values_list, grads_list));
+}
+
+// NIF: vjp_apply(helper_pid, primals_list, cotangents_list)
+static ERL_NIF_TERM nif_vjp_apply(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc;
+
+    ErlNifPid helper_pid;
+    if (!enif_get_local_pid(env, argv[0], &helper_pid))
+        return MLX_NIF_ERROR(env, "expected helper pid");
+
+    // Parse primals
+    unsigned int plen;
+    if (!enif_get_list_length(env, argv[1], &plen))
+        return enif_make_badarg(env);
+
+    mlx_vector_array primals = mlx_vector_array_new();
+    ERL_NIF_TERM head, tail = argv[1];
+    for (unsigned int i = 0; i < plen; i++) {
+        enif_get_list_cell(env, tail, &head, &tail);
+        MlxArrayResource *arr;
+        if (!enif_get_resource(env, head, MLX_ARRAY_RESOURCE, (void**)&arr)) {
+            mlx_vector_array_free(primals);
+            return enif_make_badarg(env);
+        }
+        mlx_vector_array_append_value(primals, arr->inner);
+    }
+
+    // Parse cotangents
+    unsigned int clen;
+    if (!enif_get_list_length(env, argv[2], &clen))  {
+        mlx_vector_array_free(primals);
+        return enif_make_badarg(env);
+    }
+
+    mlx_vector_array cotangents = mlx_vector_array_new();
+    tail = argv[2];
+    for (unsigned int i = 0; i < clen; i++) {
+        enif_get_list_cell(env, tail, &head, &tail);
+        MlxArrayResource *arr;
+        if (!enif_get_resource(env, head, MLX_ARRAY_RESOURCE, (void**)&arr)) {
+            mlx_vector_array_free(primals);
+            mlx_vector_array_free(cotangents);
+            return enif_make_badarg(env);
+        }
+        mlx_vector_array_append_value(cotangents, arr->inner);
+    }
+
+    // Create closure bridge
+    ClosureBridgePayload *bridge = enif_alloc_resource(
+        MLX_CLOSURE_BRIDGE_RESOURCE, sizeof(ClosureBridgePayload));
+    memset(bridge, 0, sizeof(ClosureBridgePayload));
+    bridge->msg_env = enif_alloc_env();
+    bridge->helper_pid = helper_pid;
+    bridge->mutex = enif_mutex_create("vjp_bridge");
+    bridge->cond = enif_cond_create("vjp_bridge");
+    bridge->result.ctx = NULL;
+    bridge->ready = 0;
+    bridge->error = 0;
+    enif_keep_resource(bridge);
+
+    mlx_closure closure = mlx_closure_new_func_payload(
+        closure_trampoline, (void*)bridge, closure_payload_dtor);
+
+    if (!closure.ctx) {
+        enif_release_resource(bridge);
+        enif_release_resource(bridge);
+        mlx_vector_array_free(primals);
+        mlx_vector_array_free(cotangents);
+        return MLX_NIF_ERROR(env, "failed to create closure");
+    }
+
+    // Call mlx_vjp
+    mlx_vector_array out_primals = mlx_vector_array_new();
+    mlx_vector_array out_vjps = mlx_vector_array_new();
+    int ret = mlx_vjp(&out_primals, &out_vjps, closure, primals, cotangents);
+
+    mlx_closure_free(closure);
+    enif_release_resource(bridge);
+    enif_release_resource(bridge);
+    mlx_vector_array_free(primals);
+    mlx_vector_array_free(cotangents);
+
+    if (ret != 0) {
+        mlx_vector_array_free(out_primals);
+        mlx_vector_array_free(out_vjps);
+        return MLX_NIF_ERROR(env, last_error_msg);
+    }
+
+    // Convert to Erlang lists
+    size_t np = mlx_vector_array_size(out_primals);
+    size_t nv = mlx_vector_array_size(out_vjps);
+
+    ERL_NIF_TERM primals_result = enif_make_list(env, 0);
+    for (int i = (int)np - 1; i >= 0; i--) {
+        mlx_array elem = mlx_array_new();
+        mlx_vector_array_get(&elem, out_primals, (size_t)i);
+        mlx_array copy = mlx_array_new();
+        mlx_array_set(&copy, elem);
+        mlx_array_free(elem);
+        primals_result = enif_make_list_cell(env, wrap_array_raw(env, copy), primals_result);
+    }
+
+    ERL_NIF_TERM vjps_result = enif_make_list(env, 0);
+    for (int i = (int)nv - 1; i >= 0; i--) {
+        mlx_array elem = mlx_array_new();
+        mlx_vector_array_get(&elem, out_vjps, (size_t)i);
+        mlx_array copy = mlx_array_new();
+        mlx_array_set(&copy, elem);
+        mlx_array_free(elem);
+        vjps_result = enif_make_list_cell(env, wrap_array_raw(env, copy), vjps_result);
+    }
+
+    mlx_vector_array_free(out_primals);
+    mlx_vector_array_free(out_vjps);
+
+    return MLX_NIF_OK(env, enif_make_tuple2(env, primals_result, vjps_result));
+}
+
+// NIF: jvp_apply(helper_pid, primals_list, tangents_list)
+static ERL_NIF_TERM nif_jvp_apply(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc;
+
+    ErlNifPid helper_pid;
+    if (!enif_get_local_pid(env, argv[0], &helper_pid))
+        return MLX_NIF_ERROR(env, "expected helper pid");
+
+    // Parse primals
+    unsigned int plen;
+    if (!enif_get_list_length(env, argv[1], &plen))
+        return enif_make_badarg(env);
+
+    mlx_vector_array primals = mlx_vector_array_new();
+    ERL_NIF_TERM head, tail = argv[1];
+    for (unsigned int i = 0; i < plen; i++) {
+        enif_get_list_cell(env, tail, &head, &tail);
+        MlxArrayResource *arr;
+        if (!enif_get_resource(env, head, MLX_ARRAY_RESOURCE, (void**)&arr)) {
+            mlx_vector_array_free(primals);
+            return enif_make_badarg(env);
+        }
+        mlx_vector_array_append_value(primals, arr->inner);
+    }
+
+    // Parse tangents
+    unsigned int tlen;
+    if (!enif_get_list_length(env, argv[2], &tlen)) {
+        mlx_vector_array_free(primals);
+        return enif_make_badarg(env);
+    }
+
+    mlx_vector_array tangents = mlx_vector_array_new();
+    tail = argv[2];
+    for (unsigned int i = 0; i < tlen; i++) {
+        enif_get_list_cell(env, tail, &head, &tail);
+        MlxArrayResource *arr;
+        if (!enif_get_resource(env, head, MLX_ARRAY_RESOURCE, (void**)&arr)) {
+            mlx_vector_array_free(primals);
+            mlx_vector_array_free(tangents);
+            return enif_make_badarg(env);
+        }
+        mlx_vector_array_append_value(tangents, arr->inner);
+    }
+
+    // Create closure bridge
+    ClosureBridgePayload *bridge = enif_alloc_resource(
+        MLX_CLOSURE_BRIDGE_RESOURCE, sizeof(ClosureBridgePayload));
+    memset(bridge, 0, sizeof(ClosureBridgePayload));
+    bridge->msg_env = enif_alloc_env();
+    bridge->helper_pid = helper_pid;
+    bridge->mutex = enif_mutex_create("jvp_bridge");
+    bridge->cond = enif_cond_create("jvp_bridge");
+    bridge->result.ctx = NULL;
+    bridge->ready = 0;
+    bridge->error = 0;
+    enif_keep_resource(bridge);
+
+    mlx_closure closure = mlx_closure_new_func_payload(
+        closure_trampoline, (void*)bridge, closure_payload_dtor);
+
+    if (!closure.ctx) {
+        enif_release_resource(bridge);
+        enif_release_resource(bridge);
+        mlx_vector_array_free(primals);
+        mlx_vector_array_free(tangents);
+        return MLX_NIF_ERROR(env, "failed to create closure");
+    }
+
+    // Call mlx_jvp
+    mlx_vector_array out_primals = mlx_vector_array_new();
+    mlx_vector_array out_tangents = mlx_vector_array_new();
+    int ret = mlx_jvp(&out_primals, &out_tangents, closure, primals, tangents);
+
+    mlx_closure_free(closure);
+    enif_release_resource(bridge);
+    enif_release_resource(bridge);
+    mlx_vector_array_free(primals);
+    mlx_vector_array_free(tangents);
+
+    if (ret != 0) {
+        mlx_vector_array_free(out_primals);
+        mlx_vector_array_free(out_tangents);
+        return MLX_NIF_ERROR(env, last_error_msg);
+    }
+
+    // Convert to Erlang lists
+    size_t np = mlx_vector_array_size(out_primals);
+    size_t nt = mlx_vector_array_size(out_tangents);
+
+    ERL_NIF_TERM primals_result = enif_make_list(env, 0);
+    for (int i = (int)np - 1; i >= 0; i--) {
+        mlx_array elem = mlx_array_new();
+        mlx_vector_array_get(&elem, out_primals, (size_t)i);
+        mlx_array copy = mlx_array_new();
+        mlx_array_set(&copy, elem);
+        mlx_array_free(elem);
+        primals_result = enif_make_list_cell(env, wrap_array_raw(env, copy), primals_result);
+    }
+
+    ERL_NIF_TERM tangents_result = enif_make_list(env, 0);
+    for (int i = (int)nt - 1; i >= 0; i--) {
+        mlx_array elem = mlx_array_new();
+        mlx_vector_array_get(&elem, out_tangents, (size_t)i);
+        mlx_array copy = mlx_array_new();
+        mlx_array_set(&copy, elem);
+        mlx_array_free(elem);
+        tangents_result = enif_make_list_cell(env, wrap_array_raw(env, copy), tangents_result);
+    }
+
+    mlx_vector_array_free(out_primals);
+    mlx_vector_array_free(out_tangents);
+
+    return MLX_NIF_OK(env, enif_make_tuple2(env, primals_result, tangents_result));
+}
+
+// --- NIF: vmap_apply ---
+// Vectorized mapping via mlx_detail_vmap_trace + mlx_detail_vmap_replace
+static ERL_NIF_TERM nif_vmap_apply(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc;
+
+    ErlNifPid helper_pid;
+    if (!enif_get_local_pid(env, argv[0], &helper_pid))
+        return MLX_NIF_ERROR(env, "expected helper pid");
+
+    // Parse inputs (list of array refs)
+    unsigned int ilen;
+    if (!enif_get_list_length(env, argv[1], &ilen))
+        return enif_make_badarg(env);
+
+    mlx_vector_array inputs = mlx_vector_array_new();
+    ERL_NIF_TERM head, tail = argv[1];
+    for (unsigned int i = 0; i < ilen; i++) {
+        enif_get_list_cell(env, tail, &head, &tail);
+        MlxArrayResource *arr;
+        if (!enif_get_resource(env, head, MLX_ARRAY_RESOURCE, (void**)&arr)) {
+            mlx_vector_array_free(inputs);
+            return enif_make_badarg(env);
+        }
+        mlx_vector_array_append_value(inputs, arr->inner);
+    }
+
+    // Parse in_axes (list of ints)
+    unsigned int in_axes_len;
+    if (!enif_get_list_length(env, argv[2], &in_axes_len)) {
+        mlx_vector_array_free(inputs);
+        return enif_make_badarg(env);
+    }
+    int *in_axes = enif_alloc(sizeof(int) * in_axes_len);
+    tail = argv[2];
+    for (unsigned int i = 0; i < in_axes_len; i++) {
+        enif_get_list_cell(env, tail, &head, &tail);
+        if (!enif_get_int(env, head, &in_axes[i])) {
+            enif_free(in_axes);
+            mlx_vector_array_free(inputs);
+            return enif_make_badarg(env);
+        }
+    }
+
+    // Parse out_axes (list of ints)
+    unsigned int out_axes_len;
+    if (!enif_get_list_length(env, argv[3], &out_axes_len)) {
+        enif_free(in_axes);
+        mlx_vector_array_free(inputs);
+        return enif_make_badarg(env);
+    }
+    int *out_axes = enif_alloc(sizeof(int) * out_axes_len);
+    tail = argv[3];
+    for (unsigned int i = 0; i < out_axes_len; i++) {
+        enif_get_list_cell(env, tail, &head, &tail);
+        if (!enif_get_int(env, head, &out_axes[i])) {
+            enif_free(in_axes);
+            enif_free(out_axes);
+            mlx_vector_array_free(inputs);
+            return enif_make_badarg(env);
+        }
+    }
+
+    // Create closure bridge
+    ClosureBridgePayload *bridge = enif_alloc_resource(
+        MLX_CLOSURE_BRIDGE_RESOURCE, sizeof(ClosureBridgePayload));
+    memset(bridge, 0, sizeof(ClosureBridgePayload));
+    bridge->msg_env = enif_alloc_env();
+    bridge->helper_pid = helper_pid;
+    bridge->mutex = enif_mutex_create("vmap_bridge");
+    bridge->cond = enif_cond_create("vmap_bridge");
+    bridge->result.ctx = NULL;
+    bridge->ready = 0;
+    bridge->error = 0;
+    enif_keep_resource(bridge);
+
+    mlx_closure closure = mlx_closure_new_func_payload(
+        closure_trampoline, (void*)bridge, closure_payload_dtor);
+
+    if (!closure.ctx) {
+        enif_release_resource(bridge);
+        enif_release_resource(bridge);
+        enif_free(in_axes);
+        enif_free(out_axes);
+        mlx_vector_array_free(inputs);
+        return MLX_NIF_ERROR(env, "failed to create closure");
+    }
+
+    // Step 1: vmap_trace — gets traced inputs and outputs
+    mlx_vector_array s_inputs = mlx_vector_array_new();
+    mlx_vector_array s_outputs = mlx_vector_array_new();
+    int ret = mlx_detail_vmap_trace(
+        &s_inputs, &s_outputs, closure, inputs, in_axes, (size_t)in_axes_len);
+
+    mlx_closure_free(closure);
+    enif_release_resource(bridge);
+    enif_release_resource(bridge);
+
+    if (ret != 0) {
+        enif_free(in_axes);
+        enif_free(out_axes);
+        mlx_vector_array_free(inputs);
+        mlx_vector_array_free(s_inputs);
+        mlx_vector_array_free(s_outputs);
+        return MLX_NIF_ERROR(env, last_error_msg);
+    }
+
+    // Step 2: vmap_replace — replaces traced arrays with actual vmapped results
+    mlx_vector_array result = mlx_vector_array_new();
+    ret = mlx_detail_vmap_replace(
+        &result, inputs, s_inputs, s_outputs,
+        in_axes, (size_t)in_axes_len, out_axes, (size_t)out_axes_len);
+
+    enif_free(in_axes);
+    enif_free(out_axes);
+    mlx_vector_array_free(inputs);
+    mlx_vector_array_free(s_inputs);
+    mlx_vector_array_free(s_outputs);
+
+    if (ret != 0) {
+        mlx_vector_array_free(result);
+        return MLX_NIF_ERROR(env, last_error_msg);
+    }
+
+    // Convert results to Erlang list
+    size_t nout = mlx_vector_array_size(result);
+    ERL_NIF_TERM result_list = enif_make_list(env, 0);
+    for (int i = (int)nout - 1; i >= 0; i--) {
+        mlx_array elem = mlx_array_new();
+        mlx_vector_array_get(&elem, result, (size_t)i);
+        mlx_array copy = mlx_array_new();
+        mlx_array_set(&copy, elem);
+        mlx_array_free(elem);
+        result_list = enif_make_list_cell(env, wrap_array_raw(env, copy), result_list);
+    }
+
+    mlx_vector_array_free(result);
+    return MLX_NIF_OK(env, result_list);
+}
+
+// ============================================================
 // NIF: Load / Upgrade / Unload
 // ============================================================
 
@@ -3276,9 +3934,11 @@ static int load(ErlNifEnv* env, void** priv, ERL_NIF_TERM load_info) {
         device_destructor, ERL_NIF_RT_CREATE | ERL_NIF_RT_TAKEOVER, NULL);
     MLX_VECTOR_ARRAY_RESOURCE = enif_open_resource_type(env, NULL, "mlx_vector_array",
         vector_array_destructor, ERL_NIF_RT_CREATE | ERL_NIF_RT_TAKEOVER, NULL);
+    MLX_CLOSURE_BRIDGE_RESOURCE = enif_open_resource_type(env, NULL, "mlx_closure_bridge",
+        closure_bridge_destructor, ERL_NIF_RT_CREATE | ERL_NIF_RT_TAKEOVER, NULL);
 
     if (!MLX_ARRAY_RESOURCE || !MLX_STREAM_RESOURCE || !MLX_DEVICE_RESOURCE ||
-        !MLX_VECTOR_ARRAY_RESOURCE)
+        !MLX_VECTOR_ARRAY_RESOURCE || !MLX_CLOSURE_BRIDGE_RESOURCE)
         return -1;
 
     // Initialize atoms
@@ -3591,6 +4251,14 @@ static ErlNifFunc nif_funcs[] = {
     {"mlx_load",                  2, nif_load,                 0},
     {"mlx_save_safetensors",      5, nif_save_safetensors,     0},
     {"mlx_load_safetensors",      2, nif_load_safetensors,     0},
+
+    // Wave 9: Function transforms (closure bridge)
+    {"closure_respond",           2, nif_closure_respond,      0},
+    {"closure_respond_error",     1, nif_closure_respond_error, 0},
+    {"value_and_grad_apply",      3, nif_value_and_grad_apply, ERL_NIF_DIRTY_JOB_CPU_BOUND},
+    {"vjp_apply",                 3, nif_vjp_apply,            ERL_NIF_DIRTY_JOB_CPU_BOUND},
+    {"jvp_apply",                 3, nif_jvp_apply,            ERL_NIF_DIRTY_JOB_CPU_BOUND},
+    {"vmap_apply",                4, nif_vmap_apply,           ERL_NIF_DIRTY_JOB_CPU_BOUND},
 };
 
 ERL_NIF_INIT(Elixir.Mlx.NIF, nif_funcs, load, NULL, upgrade, NULL)

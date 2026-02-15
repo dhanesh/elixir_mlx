@@ -8,6 +8,10 @@
 #include <erl_nif.h>
 #include <mlx/c/mlx.h>
 #include <mlx/c/optional.h>
+#include <mlx/c/closure.h>
+#include <mlx/c/transforms.h>
+#include <mlx/c/transforms_impl.h>
+#include <mlx/c/compile.h>
 
 // --- Resource Types ---
 // Each mlx-c object type gets a corresponding Erlang resource type
@@ -18,6 +22,7 @@ extern ErlNifResourceType *MLX_ARRAY_RESOURCE;
 extern ErlNifResourceType *MLX_STREAM_RESOURCE;
 extern ErlNifResourceType *MLX_DEVICE_RESOURCE;
 extern ErlNifResourceType *MLX_VECTOR_ARRAY_RESOURCE;
+extern ErlNifResourceType *MLX_CLOSURE_BRIDGE_RESOURCE;
 
 // --- Resource Wrappers ---
 // We wrap mlx-c handles in structs stored as NIF resources.
@@ -38,6 +43,20 @@ typedef struct {
 typedef struct {
     mlx_vector_array inner;
 } MlxVectorArrayResource;
+
+// --- Closure Bridge ---
+// Bridges Elixir functions to mlx-c closures using a helper process +
+// dirty scheduler blocking pattern. The trampoline callback sends inputs
+// to the helper, then blocks until it receives results back.
+typedef struct {
+    ErlNifEnv *msg_env;       // Pre-allocated env for sending messages
+    ErlNifPid helper_pid;     // Helper process PID
+    ErlNifMutex *mutex;       // Synchronization mutex
+    ErlNifCond *cond;         // Condition variable for signaling
+    mlx_vector_array result;  // Result from Elixir function
+    int ready;                // Flag: result is ready
+    int error;                // Flag: error occurred
+} ClosureBridgePayload;
 
 // --- Atoms ---
 extern ERL_NIF_TERM ATOM_OK;
