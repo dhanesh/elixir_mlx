@@ -726,4 +726,190 @@ defmodule MlxTest do
       assert Nx.to_flat_list(result) == Nx.to_flat_list(x)
     end
   end
+
+  describe "fft/ifft" do
+    test "fft of constant signal" do
+      # FFT of [1, 1, 1, 1] → [4, 0, 0, 0] (complex output)
+      t = Nx.tensor([1.0, 1.0, 1.0, 1.0])
+      result = Nx.fft(t)
+      assert Nx.shape(result) == {4}
+      # Compare real and imaginary parts separately since output is complex
+      real_part = Nx.real(result)
+      imag_part = Nx.imag(result)
+      assert_all_close(real_part, Nx.tensor([4.0, 0.0, 0.0, 0.0]), atol: 1.0e-5)
+      assert_all_close(imag_part, Nx.tensor([0.0, 0.0, 0.0, 0.0]), atol: 1.0e-5)
+    end
+
+    test "fft-ifft roundtrip" do
+      t = Nx.tensor([1.0, 2.0, 3.0, 4.0])
+      roundtrip = t |> Nx.fft() |> Nx.ifft()
+      original = Nx.to_flat_list(t)
+
+      roundtrip
+      |> Nx.real()
+      |> Nx.to_flat_list()
+      |> Enum.zip(original)
+      |> Enum.each(fn {got, exp} -> assert_in_delta got, exp, 1.0e-5 end)
+    end
+
+    test "fft with length option" do
+      t = Nx.tensor([1.0, 2.0])
+      result = Nx.fft(t, length: 4)
+      assert Nx.shape(result) == {4}
+    end
+
+    test "ifft of known signal" do
+      # IFFT of [4, 0, 0, 0] → [1, 1, 1, 1]
+      t = Nx.tensor([4.0, 0.0, 0.0, 0.0])
+      result = Nx.ifft(t)
+
+      result
+      |> Nx.real()
+      |> Nx.to_flat_list()
+      |> Enum.each(fn v -> assert_in_delta v, 1.0, 1.0e-5 end)
+    end
+  end
+
+  describe "gather" do
+    test "gather single axis" do
+      # Gather rows 2 and 0 from a 3x4 matrix
+      t = Nx.tensor([[10, 11, 12, 13], [20, 21, 22, 23], [30, 31, 32, 33]])
+      indices = Nx.tensor([[2], [0]])
+      result = Nx.gather(t, indices)
+      assert Nx.shape(result) == {2, 4}
+      assert Nx.to_flat_list(result) == [30, 31, 32, 33, 10, 11, 12, 13]
+    end
+
+    test "gather two axes" do
+      t = Nx.tensor([[10, 11, 12], [20, 21, 22], [30, 31, 32]])
+      # Gather element at [0,1] and [2,0]
+      indices = Nx.tensor([[0, 1], [2, 0]])
+      result = Nx.gather(t, indices)
+      assert Nx.shape(result) == {2}
+      assert Nx.to_flat_list(result) == [11, 30]
+    end
+  end
+
+  describe "indexed_add" do
+    test "indexed_add single axis" do
+      t = Nx.tensor([10, 20, 30, 40, 50])
+      indices = Nx.tensor([[1], [3]])
+      updates = Nx.tensor([100, 200])
+      result = Nx.indexed_add(t, indices, updates)
+      assert Nx.to_flat_list(result) == [10, 120, 30, 240, 50]
+    end
+
+    test "indexed_add to 2D tensor" do
+      t = Nx.tensor([[1, 2], [3, 4], [5, 6]])
+      indices = Nx.tensor([[0], [2]])
+      updates = Nx.tensor([[10, 20], [30, 40]])
+      result = Nx.indexed_add(t, indices, updates)
+      assert Nx.to_flat_list(result) == [11, 22, 3, 4, 35, 46]
+    end
+  end
+
+  describe "indexed_put" do
+    test "indexed_put single axis" do
+      t = Nx.tensor([10, 20, 30, 40, 50])
+      indices = Nx.tensor([[1], [3]])
+      updates = Nx.tensor([100, 200])
+      result = Nx.indexed_put(t, indices, updates)
+      assert Nx.to_flat_list(result) == [10, 100, 30, 200, 50]
+    end
+
+    test "indexed_put to 2D tensor" do
+      t = Nx.tensor([[1, 2], [3, 4], [5, 6]])
+      indices = Nx.tensor([[0], [2]])
+      updates = Nx.tensor([[10, 20], [30, 40]])
+      result = Nx.indexed_put(t, indices, updates)
+      assert Nx.to_flat_list(result) == [10, 20, 3, 4, 30, 40]
+    end
+  end
+
+  describe "conv" do
+    test "1D convolution" do
+      # Simple 1D convolution: [1, 2, 3, 4, 5] * [1, 1] with valid padding
+      input = Nx.tensor([[[1.0, 2.0, 3.0, 4.0, 5.0]]])  # {1, 1, 5} = NCHW
+      kernel = Nx.tensor([[[1.0, 1.0]]])  # {1, 1, 2} = OIHW
+      result = Nx.conv(input, kernel)
+      assert Nx.shape(result) == {1, 1, 4}
+      assert_all_close(result, Nx.tensor([[[3.0, 5.0, 7.0, 9.0]]]))
+    end
+
+    test "2D convolution identity kernel" do
+      # 2D convolution with 1x1 identity kernel
+      input = Nx.tensor([[[[1.0, 2.0], [3.0, 4.0]]]])  # {1, 1, 2, 2}
+      kernel = Nx.tensor([[[[1.0]]]])  # {1, 1, 1, 1}
+      result = Nx.conv(input, kernel)
+      assert Nx.shape(result) == {1, 1, 2, 2}
+      assert_all_close(result, input)
+    end
+
+    test "2D convolution with padding" do
+      input = Nx.tensor([[[[1.0, 2.0], [3.0, 4.0]]]])
+      kernel = Nx.tensor([[[[1.0, 0.0], [0.0, 0.0]]]])
+      result = Nx.conv(input, kernel, padding: :same)
+      assert Nx.shape(result) == {1, 1, 2, 2}
+    end
+
+    test "2D convolution with strides" do
+      input = Nx.iota({1, 1, 4, 4}, type: {:f, 32})
+      kernel = Nx.tensor([[[[1.0, 0.0], [0.0, 1.0]]]])
+      result = Nx.conv(input, kernel, strides: [2, 2])
+      assert Nx.shape(result) == {1, 1, 2, 2}
+    end
+
+    test "convolution with groups" do
+      input = Nx.iota({1, 2, 3}, type: {:f, 32})
+      kernel = Nx.iota({2, 1, 1}, type: {:f, 32})
+      result = Nx.conv(input, kernel, feature_group_size: 2)
+      assert Nx.shape(result) == {1, 2, 3}
+    end
+  end
+
+  describe "to_batched" do
+    test "to_batched with exact division" do
+      t = Nx.iota({6, 2})
+      batches = Nx.to_batched(t, 3) |> Enum.to_list()
+      assert length(batches) == 2
+      assert Nx.shape(hd(batches)) == {3, 2}
+      assert Nx.to_flat_list(hd(batches)) == [0, 1, 2, 3, 4, 5]
+      assert Nx.to_flat_list(List.last(batches)) == [6, 7, 8, 9, 10, 11]
+    end
+
+    test "to_batched with discard leftover" do
+      t = Nx.iota({7, 2})
+      batches = Nx.to_batched(t, 3, leftover: :discard) |> Enum.to_list()
+      assert length(batches) == 2
+      assert Nx.shape(hd(batches)) == {3, 2}
+    end
+
+    test "to_batched with repeat leftover" do
+      t = Nx.iota({5, 2})
+      batches = Nx.to_batched(t, 3, leftover: :repeat) |> Enum.to_list()
+      assert length(batches) == 2
+      assert Nx.shape(hd(batches)) == {3, 2}
+      assert Nx.shape(List.last(batches)) == {3, 2}
+      # Last batch should contain rows 3, 4, and then row 0 (repeated)
+      last_batch = Nx.to_flat_list(List.last(batches))
+      assert last_batch == [6, 7, 8, 9, 0, 1]
+    end
+
+    test "to_batched single batch" do
+      t = Nx.iota({3, 2})
+      batches = Nx.to_batched(t, 3) |> Enum.to_list()
+      assert length(batches) == 1
+      assert Nx.shape(hd(batches)) == {3, 2}
+    end
+  end
+
+  # Helper to assert tensors are close
+  defp assert_all_close(left, right, opts \\ []) do
+    atol = Keyword.get(opts, :atol, 1.0e-5)
+
+    left
+    |> Nx.to_flat_list()
+    |> Enum.zip(Nx.to_flat_list(right))
+    |> Enum.each(fn {l, r} -> assert_in_delta l, r, atol end)
+  end
 end

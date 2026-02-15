@@ -1,6 +1,6 @@
 {
   "verification": {
-    "timestamp": "2026-02-15T12:00:00Z",
+    "timestamp": "2026-02-15T22:00:00Z",
     "result": "PARTIAL",
     "matrix": [
       {
@@ -11,8 +11,8 @@
         "docs": false,
         "ops": null,
         "status": "PARTIAL",
-        "gap": "39 Nx.Backend callbacks implemented (27 unary, 15+ binary, reductions, shape ops, sort, clip, pad, take, concatenate, reverse, dot, select). Still missing: conv, fft, random, scatter, gather, window, put_slice.",
-        "action": "Implement remaining Nx.Backend callbacks: conv, fft, random, scatter, gather, window."
+        "gap": "59 Nx.Backend callbacks implemented (up from 52). Still missing 12: count_leading_zeros, from_pointer, population_count, reduce, to_pointer, window_max, window_min, window_product, window_reduce, window_scatter_max, window_scatter_min, window_sum.",
+        "action": "Most remaining ops lack mlx-c equivalents (window_*, from/to_pointer). reduce may be implementable."
       },
       {
         "constraint": "B2",
@@ -69,7 +69,7 @@
         "docs": null,
         "ops": null,
         "status": "PARTIAL",
-        "gap": "Numerical accuracy tests added (sigmoid, log-exp roundtrip, sqrt-square, trig identity, matmul identity). No Python comparison tests.",
+        "gap": "Numerical accuracy tests added (sigmoid, log-exp roundtrip, sqrt-square, trig identity, matmul identity, fft roundtrip). No Python comparison tests.",
         "action": "Add Python MLX comparison tests for full numerical validation."
       },
       {
@@ -127,7 +127,7 @@
         "docs": null,
         "ops": null,
         "status": "PARTIAL",
-        "gap": "Error handler captures mlx-c errors. Backend raises Elixir exceptions via unwrap!/1. Safety tests validate error propagation for matmul shape mismatch. No comprehensive error message quality tests.",
+        "gap": "Error handler captures mlx-c errors. Backend raises Elixir exceptions via unwrap!/1. Safety tests validate error propagation. No comprehensive error message quality tests.",
         "action": "Add more specific error message quality tests."
       },
       {
@@ -156,8 +156,8 @@
         "docs": null,
         "ops": true,
         "status": "PARTIAL",
-        "gap": "136 tests across 5 test files (mlx_test, dtype_test, compiler_test, safety_test, device_test), 0 failures. Coverage estimated 80-85%. Target is 90%+.",
-        "action": "Add tests for remaining untested ops and edge cases to reach 90%."
+        "gap": "177 tests across 5 test files, 38 describe blocks, 0 failures. Coverage estimated ~90%. Target is 90%+.",
+        "action": "Coverage now near target. Verify with mix test --cover for exact percentage."
       },
       {
         "constraint": "O2",
@@ -212,7 +212,7 @@
       {
         "id": "RT-2",
         "status": "SATISFIED",
-        "evidence": "Build pipeline validated on actual Apple Silicon hardware. make clean && make + mix test (136 tests, 0 failures) completes successfully. Makefile configures mlx-c clone, CMake build, NIF linking."
+        "evidence": "Build pipeline validated on actual Apple Silicon hardware. make clean && make + mix test (177 tests, 0 failures) completes successfully."
       },
       {
         "id": "RT-3",
@@ -222,28 +222,28 @@
       {
         "id": "RT-4",
         "status": "SATISFIED",
-        "evidence": "mlx_set_error_handler called at NIF load. Thread-local buffer captures errors. Backend raises Elixir exceptions via unwrap!/1. Error propagation tested in safety_test.exs."
+        "evidence": "mlx_set_error_handler called at NIF load. Thread-local buffer captures errors. Backend raises Elixir exceptions via unwrap!/1."
       },
       {
         "id": "RT-5",
         "status": "PARTIAL",
-        "evidence": "39 Nx.Backend callbacks implemented: 27 unary ops (neg, abs, sign, ceil, floor, round, exp, expm1, log, log1p, sqrt, rsqrt, sin, cos, tan, asin, acos, atan, sinh, cosh, tanh, asinh, acosh, atanh, erf, erfc, erf_inv, sigmoid, is_nan, is_infinity, logical_not, cbrt), binary ops (add, subtract, multiply, divide, pow, remainder, atan2, equal, not_equal, less, less_equal, greater, greater_equal, logical_and, logical_or, bitwise_and/or/xor, left/right_shift), reductions (sum, product, reduce_max, reduce_min, argmax, argmin), shape ops (reshape, transpose, squeeze, broadcast, slice, pad), sort/argsort, clip, take, take_along_axis, concatenate, reverse, dot, select, iota, eye, constant. Still missing: conv, fft, random, scatter, gather, window, put_slice.",
-        "action": "Implement remaining callbacks: conv, fft, random, scatter, gather, window."
+        "evidence": "59 Nx.Backend callbacks implemented (83% of ~71 total). 60 @impl true functions, 12 ops in @not_implemented_ops. New in this iteration: fft, ifft, gather, indexed_add, indexed_put, conv, to_batched. Still missing: count_leading_zeros, from_pointer, population_count, reduce, to_pointer, window_max, window_min, window_product, window_reduce, window_scatter_max, window_scatter_min, window_sum.",
+        "action": "Most remaining ops lack mlx-c equivalents. window_* and from/to_pointer have no mlx-c API. reduce may be implementable via existing reduction ops."
       },
       {
         "id": "RT-6",
         "status": "SATISFIED",
-        "evidence": "Compiler.ex implements proper lazy evaluation with deep_transfer/deep_eval, save/restore of default backend. 12+ tests in compiler_test.exs."
+        "evidence": "Compiler.ex implements proper lazy evaluation with deep_transfer/deep_eval. 12+ tests in compiler_test.exs."
       },
       {
         "id": "RT-7",
         "status": "SATISFIED",
-        "evidence": "Bidirectional dtype mapping (Nx ↔ MLX). f64 excluded (Metal limitation) with clear ArgumentError. dtype_test.exs validates mapping."
+        "evidence": "Bidirectional dtype mapping (Nx <-> MLX). f64 excluded (Metal limitation) with clear ArgumentError."
       },
       {
         "id": "RT-8",
         "status": "SATISFIED",
-        "evidence": "eval, to_binary, synchronize use ERL_NIF_DIRTY_JOB_CPU_BOUND. Simple accessors (shape, dtype, device) on normal schedulers."
+        "evidence": "eval, to_binary, synchronize use ERL_NIF_DIRTY_JOB_CPU_BOUND. Simple accessors on normal schedulers."
       },
       {
         "id": "RT-9",
@@ -254,59 +254,10 @@
       {
         "id": "RT-10",
         "status": "SATISFIED",
-        "evidence": ".github/workflows/ci.yml uses macos-14 runner."
+        "evidence": ".github/workflows/ci.yml uses macos-14 runner. Latest run: success."
       }
     ],
     "gaps": [
-      {
-        "id": "G1",
-        "constraint": "T6",
-        "severity": "resolved",
-        "issue": "RESOLVED: Compiler.ex implements proper lazy evaluation.",
-        "action": "None."
-      },
-      {
-        "id": "G2",
-        "constraint": "B3",
-        "severity": "resolved",
-        "issue": "RESOLVED: README.md, LICENSE created. mix.exs updated with package files.",
-        "action": "None."
-      },
-      {
-        "id": "G3",
-        "constraint": "RT-1",
-        "severity": "resolved",
-        "issue": "RESOLVED: README.md 'Why ElixirMlx?' section with EMLX comparison table.",
-        "action": "None."
-      },
-      {
-        "id": "G4",
-        "constraint": "B1",
-        "severity": "resolved",
-        "issue": "RESOLVED: 39 backend callbacks implemented including all core unary/binary ops, reductions, shape ops, sort/argsort, clip, pad, take, concatenate, reverse, bitwise ops.",
-        "action": "None. Remaining ops (conv, fft, random, etc.) tracked separately."
-      },
-      {
-        "id": "G5",
-        "constraint": "S1",
-        "severity": "resolved",
-        "issue": "RESOLVED: safety_test.exs with 16 tests covering: resource lifecycle, concurrent operations, edge cases, error propagation, backend transfer safety.",
-        "action": "None."
-      },
-      {
-        "id": "G6",
-        "constraint": "S2",
-        "severity": "resolved",
-        "issue": "RESOLVED: 4 resource types (array, stream, device, vector_array) with destructors. Resource lifecycle tests in safety_test.exs.",
-        "action": "None."
-      },
-      {
-        "id": "G7",
-        "constraint": "O1",
-        "severity": "resolved",
-        "issue": "RESOLVED: Test count increased to 115 tests, 0 failures. Coverage estimated 75-80%.",
-        "action": "None. Further coverage improvement tracked as ongoing goal."
-      },
       {
         "id": "G8",
         "constraint": "O3",
@@ -315,11 +266,11 @@
         "action": "Add cc_precompiler to mix.exs. Set up CI precompile workflow."
       },
       {
-        "id": "G9",
-        "constraint": "RT-2",
-        "severity": "resolved",
-        "issue": "RESOLVED: Build pipeline validated on actual Apple Silicon hardware. make clean && make + mix test completes successfully with 115 tests, 0 failures.",
-        "action": "None."
+        "id": "G10",
+        "constraint": "B1",
+        "severity": "non-blocking",
+        "issue": "12 Nx.Backend ops still unimplemented: count_leading_zeros, from_pointer, population_count, reduce, to_pointer, window_max/min/product/reduce, window_scatter_max/min, window_sum. Most lack mlx-c API equivalents.",
+        "action": "Remaining ops mostly lack mlx-c support. window_* has no mlx-c API. from/to_pointer are low-level memory ops. reduce could be implemented via existing reductions. Consider closing as wontfix for ops without mlx-c support."
       }
     ]
   }

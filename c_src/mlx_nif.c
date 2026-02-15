@@ -1205,6 +1205,293 @@ static ERL_NIF_TERM nif_view(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]
 }
 
 // ============================================================
+// NIF: FFT operations
+// ============================================================
+
+// fft(arr, n, axis, stream) -> {:ok, arr}
+static ERL_NIF_TERM nif_fft(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc;
+    MlxArrayResource *a;
+    MlxStreamResource *s;
+    int n, axis;
+    if (!enif_get_resource(env, argv[0], MLX_ARRAY_RESOURCE, (void**)&a) ||
+        !enif_get_int(env, argv[1], &n) ||
+        !enif_get_int(env, argv[2], &axis) ||
+        !enif_get_resource(env, argv[3], MLX_STREAM_RESOURCE, (void**)&s))
+        return MLX_NIF_ERROR(env, "bad argument");
+
+    mlx_array result = mlx_array_new();
+    int ret = mlx_fft_fft(&result, a->inner, n, axis, s->inner);
+    if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
+    return wrap_array(env, result);
+}
+
+// ifft(arr, n, axis, stream) -> {:ok, arr}
+static ERL_NIF_TERM nif_ifft(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc;
+    MlxArrayResource *a;
+    MlxStreamResource *s;
+    int n, axis;
+    if (!enif_get_resource(env, argv[0], MLX_ARRAY_RESOURCE, (void**)&a) ||
+        !enif_get_int(env, argv[1], &n) ||
+        !enif_get_int(env, argv[2], &axis) ||
+        !enif_get_resource(env, argv[3], MLX_STREAM_RESOURCE, (void**)&s))
+        return MLX_NIF_ERROR(env, "bad argument");
+
+    mlx_array result = mlx_array_new();
+    int ret = mlx_fft_ifft(&result, a->inner, n, axis, s->inner);
+    if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
+    return wrap_array(env, result);
+}
+
+// ============================================================
+// NIF: Gather / Scatter operations
+// ============================================================
+
+// gather(arr, indices_list, axes_list, slice_sizes_list, stream) -> {:ok, arr}
+static ERL_NIF_TERM nif_gather(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc;
+    MlxArrayResource *a;
+    MlxStreamResource *s;
+    if (!enif_get_resource(env, argv[0], MLX_ARRAY_RESOURCE, (void**)&a) ||
+        !enif_get_resource(env, argv[4], MLX_STREAM_RESOURCE, (void**)&s))
+        return MLX_NIF_ERROR(env, "bad argument");
+
+    // Build vector_array of indices from list of array refs
+    unsigned int list_len;
+    if (!enif_get_list_length(env, argv[1], &list_len))
+        return MLX_NIF_ERROR(env, "expected list of index arrays");
+
+    mlx_vector_array indices_vec = mlx_vector_array_new();
+    if (!indices_vec.ctx) return MLX_NIF_ERROR(env, "failed to create vector_array");
+
+    ERL_NIF_TERM head, tail = argv[1];
+    for (unsigned int i = 0; i < list_len; i++) {
+        if (!enif_get_list_cell(env, tail, &head, &tail)) {
+            mlx_vector_array_free(indices_vec);
+            return MLX_NIF_ERROR(env, "bad list element");
+        }
+        MlxArrayResource *idx;
+        if (!enif_get_resource(env, head, MLX_ARRAY_RESOURCE, (void**)&idx)) {
+            mlx_vector_array_free(indices_vec);
+            return MLX_NIF_ERROR(env, "expected array in indices list");
+        }
+        int ret = mlx_vector_array_append_value(indices_vec, idx->inner);
+        if (ret != 0) {
+            mlx_vector_array_free(indices_vec);
+            return MLX_NIF_ERROR(env, last_error_msg);
+        }
+    }
+
+    int axes[16], slice_sizes[16];
+    int n_axes, n_slice_sizes;
+    if (!get_int_list(env, argv[2], axes, &n_axes) ||
+        !get_int_list(env, argv[3], slice_sizes, &n_slice_sizes)) {
+        mlx_vector_array_free(indices_vec);
+        return MLX_NIF_ERROR(env, "expected int lists for axes/slice_sizes");
+    }
+
+    mlx_array result = mlx_array_new();
+    int ret = mlx_gather(&result, a->inner, indices_vec,
+                         axes, (size_t)n_axes,
+                         slice_sizes, (size_t)n_slice_sizes, s->inner);
+    mlx_vector_array_free(indices_vec);
+    if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
+    return wrap_array(env, result);
+}
+
+// scatter(arr, indices_list, updates, axes_list, stream) -> {:ok, arr}
+static ERL_NIF_TERM nif_scatter(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc;
+    MlxArrayResource *a, *updates;
+    MlxStreamResource *s;
+    if (!enif_get_resource(env, argv[0], MLX_ARRAY_RESOURCE, (void**)&a) ||
+        !enif_get_resource(env, argv[2], MLX_ARRAY_RESOURCE, (void**)&updates) ||
+        !enif_get_resource(env, argv[4], MLX_STREAM_RESOURCE, (void**)&s))
+        return MLX_NIF_ERROR(env, "bad argument");
+
+    // Build vector_array of indices from list of array refs
+    unsigned int list_len;
+    if (!enif_get_list_length(env, argv[1], &list_len))
+        return MLX_NIF_ERROR(env, "expected list of index arrays");
+
+    mlx_vector_array indices_vec = mlx_vector_array_new();
+    if (!indices_vec.ctx) return MLX_NIF_ERROR(env, "failed to create vector_array");
+
+    ERL_NIF_TERM head, tail = argv[1];
+    for (unsigned int i = 0; i < list_len; i++) {
+        if (!enif_get_list_cell(env, tail, &head, &tail)) {
+            mlx_vector_array_free(indices_vec);
+            return MLX_NIF_ERROR(env, "bad list element");
+        }
+        MlxArrayResource *idx;
+        if (!enif_get_resource(env, head, MLX_ARRAY_RESOURCE, (void**)&idx)) {
+            mlx_vector_array_free(indices_vec);
+            return MLX_NIF_ERROR(env, "expected array in indices list");
+        }
+        int ret = mlx_vector_array_append_value(indices_vec, idx->inner);
+        if (ret != 0) {
+            mlx_vector_array_free(indices_vec);
+            return MLX_NIF_ERROR(env, last_error_msg);
+        }
+    }
+
+    int axes[16];
+    int n_axes;
+    if (!get_int_list(env, argv[3], axes, &n_axes)) {
+        mlx_vector_array_free(indices_vec);
+        return MLX_NIF_ERROR(env, "expected int list for axes");
+    }
+
+    mlx_array result = mlx_array_new();
+    int ret = mlx_scatter(&result, a->inner, indices_vec, updates->inner,
+                          axes, (size_t)n_axes, s->inner);
+    mlx_vector_array_free(indices_vec);
+    if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
+    return wrap_array(env, result);
+}
+
+// scatter_add(arr, indices_list, updates, axes_list, stream) -> {:ok, arr}
+static ERL_NIF_TERM nif_scatter_add(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc;
+    MlxArrayResource *a, *updates;
+    MlxStreamResource *s;
+    if (!enif_get_resource(env, argv[0], MLX_ARRAY_RESOURCE, (void**)&a) ||
+        !enif_get_resource(env, argv[2], MLX_ARRAY_RESOURCE, (void**)&updates) ||
+        !enif_get_resource(env, argv[4], MLX_STREAM_RESOURCE, (void**)&s))
+        return MLX_NIF_ERROR(env, "bad argument");
+
+    unsigned int list_len;
+    if (!enif_get_list_length(env, argv[1], &list_len))
+        return MLX_NIF_ERROR(env, "expected list of index arrays");
+
+    mlx_vector_array indices_vec = mlx_vector_array_new();
+    if (!indices_vec.ctx) return MLX_NIF_ERROR(env, "failed to create vector_array");
+
+    ERL_NIF_TERM head, tail = argv[1];
+    for (unsigned int i = 0; i < list_len; i++) {
+        if (!enif_get_list_cell(env, tail, &head, &tail)) {
+            mlx_vector_array_free(indices_vec);
+            return MLX_NIF_ERROR(env, "bad list element");
+        }
+        MlxArrayResource *idx;
+        if (!enif_get_resource(env, head, MLX_ARRAY_RESOURCE, (void**)&idx)) {
+            mlx_vector_array_free(indices_vec);
+            return MLX_NIF_ERROR(env, "expected array in indices list");
+        }
+        int ret = mlx_vector_array_append_value(indices_vec, idx->inner);
+        if (ret != 0) {
+            mlx_vector_array_free(indices_vec);
+            return MLX_NIF_ERROR(env, last_error_msg);
+        }
+    }
+
+    int axes[16];
+    int n_axes;
+    if (!get_int_list(env, argv[3], axes, &n_axes)) {
+        mlx_vector_array_free(indices_vec);
+        return MLX_NIF_ERROR(env, "expected int list for axes");
+    }
+
+    mlx_array result = mlx_array_new();
+    int ret = mlx_scatter_add(&result, a->inner, indices_vec, updates->inner,
+                              axes, (size_t)n_axes, s->inner);
+    mlx_vector_array_free(indices_vec);
+    if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
+    return wrap_array(env, result);
+}
+
+// ============================================================
+// NIF: Convolution
+// ============================================================
+
+// conv_general(input, weight, strides, padding_lo, padding_hi,
+//              kernel_dilation, input_dilation, groups, flip, stream)
+static ERL_NIF_TERM nif_conv_general(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc;
+    MlxArrayResource *input, *weight;
+    MlxStreamResource *s;
+    if (!enif_get_resource(env, argv[0], MLX_ARRAY_RESOURCE, (void**)&input) ||
+        !enif_get_resource(env, argv[1], MLX_ARRAY_RESOURCE, (void**)&weight) ||
+        !enif_get_resource(env, argv[9], MLX_STREAM_RESOURCE, (void**)&s))
+        return MLX_NIF_ERROR(env, "bad argument");
+
+    int strides[16], padding_lo[16], padding_hi[16];
+    int kernel_dilation[16], input_dilation_arr[16];
+    int n_strides, n_pad_lo, n_pad_hi, n_kdil, n_idil;
+
+    if (!get_int_list(env, argv[2], strides, &n_strides) ||
+        !get_int_list(env, argv[3], padding_lo, &n_pad_lo) ||
+        !get_int_list(env, argv[4], padding_hi, &n_pad_hi) ||
+        !get_int_list(env, argv[5], kernel_dilation, &n_kdil) ||
+        !get_int_list(env, argv[6], input_dilation_arr, &n_idil))
+        return MLX_NIF_ERROR(env, "expected int lists for conv params");
+
+    int groups;
+    if (!enif_get_int(env, argv[7], &groups))
+        return MLX_NIF_ERROR(env, "expected int for groups");
+
+    int flip = (enif_compare(argv[8], ATOM_TRUE) == 0);
+
+    mlx_array result = mlx_array_new();
+    int ret = mlx_conv_general(&result, input->inner, weight->inner,
+                               strides, (size_t)n_strides,
+                               padding_lo, (size_t)n_pad_lo,
+                               padding_hi, (size_t)n_pad_hi,
+                               kernel_dilation, (size_t)n_kdil,
+                               input_dilation_arr, (size_t)n_idil,
+                               groups, flip, s->inner);
+    if (ret != 0) return MLX_NIF_ERROR(env, last_error_msg);
+    return wrap_array(env, result);
+}
+
+// ============================================================
+// NIF: Split (for to_batched)
+// ============================================================
+
+// split_equal_parts(arr, num_splits, axis, stream) -> {:ok, [arr_ref]}
+// Returns a list of array refs (one per split part)
+static ERL_NIF_TERM nif_split_equal_parts(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc;
+    MlxArrayResource *a;
+    MlxStreamResource *s;
+    int num_splits, axis;
+    if (!enif_get_resource(env, argv[0], MLX_ARRAY_RESOURCE, (void**)&a) ||
+        !enif_get_int(env, argv[1], &num_splits) ||
+        !enif_get_int(env, argv[2], &axis) ||
+        !enif_get_resource(env, argv[3], MLX_STREAM_RESOURCE, (void**)&s))
+        return MLX_NIF_ERROR(env, "bad argument");
+
+    mlx_vector_array parts = mlx_vector_array_new();
+    int ret = mlx_split_equal_parts(&parts, a->inner, num_splits, axis, s->inner);
+    if (ret != 0) {
+        mlx_vector_array_free(parts);
+        return MLX_NIF_ERROR(env, last_error_msg);
+    }
+
+    // Convert vector_array to list of array refs
+    size_t n = mlx_vector_array_size(parts);
+    ERL_NIF_TERM list = enif_make_list(env, 0);
+    for (int i = (int)n - 1; i >= 0; i--) {
+        mlx_array part = mlx_array_new();
+        int get_ret = mlx_vector_array_get(&part, parts, i);
+        if (get_ret != 0) {
+            mlx_array_free(part);
+            mlx_vector_array_free(parts);
+            return MLX_NIF_ERROR(env, last_error_msg);
+        }
+        MlxArrayResource *res = enif_alloc_resource(MLX_ARRAY_RESOURCE, sizeof(MlxArrayResource));
+        res->inner = part;
+        ERL_NIF_TERM term = enif_make_resource(env, res);
+        enif_release_resource(res);
+        list = enif_make_list_cell(env, term, list);
+    }
+
+    mlx_vector_array_free(parts);
+    return MLX_NIF_OK(env, list);
+}
+
+// ============================================================
 // NIF: Device and Stream management
 // ============================================================
 
@@ -1464,6 +1751,21 @@ static ErlNifFunc nif_funcs[] = {
     {"mlx_stack",          3, nif_stack,               0},
     {"mlx_slice_update",   6, nif_slice_update,        0},
     {"mlx_view",           3, nif_view,                0},
+
+    // FFT ops
+    {"mlx_fft",            4, nif_fft,                 0},
+    {"mlx_ifft",           4, nif_ifft,                0},
+
+    // Gather / Scatter ops
+    {"mlx_gather",         5, nif_gather,              0},
+    {"mlx_scatter",        5, nif_scatter,             0},
+    {"mlx_scatter_add",    5, nif_scatter_add,         0},
+
+    // Convolution
+    {"mlx_conv_general",  10, nif_conv_general,        0},
+
+    // Split (for to_batched)
+    {"mlx_split_equal_parts", 4, nif_split_equal_parts, 0},
 
     // Device / Stream
     {"default_cpu_stream", 0, nif_default_cpu_stream, 0},

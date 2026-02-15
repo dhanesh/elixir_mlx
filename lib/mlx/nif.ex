@@ -150,6 +150,35 @@ defmodule Mlx.NIF do
   # --- Selection ops ---
   def mlx_where(_cond, _x, _y, _stream), do: :erlang.nif_error(:not_loaded)
 
+  # --- FFT ops ---
+  def mlx_fft(_arr, _n, _axis, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_ifft(_arr, _n, _axis, _stream), do: :erlang.nif_error(:not_loaded)
+
+  # --- Gather / Scatter ops ---
+  def mlx_gather(_arr, _indices, _axes, _slice_sizes, _stream), do: :erlang.nif_error(:not_loaded)
+  def mlx_scatter(_arr, _indices, _updates, _axes, _stream), do: :erlang.nif_error(:not_loaded)
+
+  def mlx_scatter_add(_arr, _indices, _updates, _axes, _stream),
+    do: :erlang.nif_error(:not_loaded)
+
+  # --- Convolution ---
+  def mlx_conv_general(
+        _input,
+        _weight,
+        _strides,
+        _pad_lo,
+        _pad_hi,
+        _kdil,
+        _idil,
+        _groups,
+        _flip,
+        _stream
+      ),
+      do: :erlang.nif_error(:not_loaded)
+
+  # --- Split (for to_batched) ---
+  def mlx_split_equal_parts(_arr, _num_splits, _axis, _stream), do: :erlang.nif_error(:not_loaded)
+
   # --- Device / Stream ---
   def default_cpu_stream, do: :erlang.nif_error(:not_loaded)
   def default_gpu_stream, do: :erlang.nif_error(:not_loaded)

@@ -732,6 +732,254 @@ defmodule Mlx.Backend do
     to_nx(out, result)
   end
 
+  # --- FFT / IFFT ---
+
+  @impl true
+  def fft(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor, opts) do
+    ref = from_ref(tensor)
+    axis = opts[:axis]
+    n = opts[:length] || elem(tensor.shape, axis)
+    result = unwrap!(Mlx.NIF.mlx_fft(ref, n, axis, s()))
+    to_nx(out, result)
+  end
+
+  @impl true
+  def ifft(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor, opts) do
+    ref = from_ref(tensor)
+    axis = opts[:axis]
+    n = opts[:length] || elem(tensor.shape, axis)
+    result = unwrap!(Mlx.NIF.mlx_ifft(ref, n, axis, s()))
+    to_nx(out, result)
+  end
+
+  # --- Gather ---
+
+  @impl true
+  def gather(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor, %Nx.Tensor{} = indices, opts) do
+    ref = from_ref(tensor)
+    idx_ref = from_ref(indices)
+    axes = opts[:axes]
+    k = length(axes)
+
+    idx_arrays = split_indices_along_last_axis(idx_ref, indices.shape, k)
+
+    # Build slice_sizes: 1 for gathered axes, full size for others
+    input_shape = Tuple.to_list(tensor.shape)
+
+    slice_sizes =
+      for {dim, i} <- Enum.with_index(input_shape) do
+        if i in axes, do: 1, else: dim
+      end
+
+    result = unwrap!(Mlx.NIF.mlx_gather(ref, idx_arrays, axes, slice_sizes, s()))
+
+    # Squeeze gathered dimensions from output
+    # MLX output shape is (*idx_batch_shape, *slice_sizes)
+    idx_ndim = tuple_size(indices.shape) - 1
+    squeeze_axes = Enum.map(axes, fn ax -> idx_ndim + ax end)
+    result = unwrap!(Mlx.NIF.mlx_squeeze(result, Enum.sort(squeeze_axes), s()))
+
+    to_nx(out, result)
+  end
+
+  # --- Indexed add / put ---
+
+  @impl true
+  def indexed_add(
+        %Nx.Tensor{} = out,
+        %Nx.Tensor{} = tensor,
+        %Nx.Tensor{} = indices,
+        %Nx.Tensor{} = updates,
+        opts
+      ) do
+    scatter_op(:mlx_scatter_add, out, tensor, indices, updates, opts)
+  end
+
+  @impl true
+  def indexed_put(
+        %Nx.Tensor{} = out,
+        %Nx.Tensor{} = tensor,
+        %Nx.Tensor{} = indices,
+        %Nx.Tensor{} = updates,
+        opts
+      ) do
+    scatter_op(:mlx_scatter, out, tensor, indices, updates, opts)
+  end
+
+  defp scatter_op(nif_fn, out, tensor, indices, updates, opts) do
+    ref = from_ref(tensor)
+    idx_ref = from_ref(indices)
+    upd_ref = from_ref(updates)
+    axes = opts[:axes]
+
+    k = length(axes)
+    idx_arrays = split_indices_along_last_axis(idx_ref, indices.shape, k)
+
+    # Reshape updates: Nx gives (*batch, *remaining), MLX wants (*batch, *slice_sizes)
+    upd_ref = reshape_updates_for_scatter(upd_ref, indices.shape, tensor.shape, axes)
+
+    result = unwrap!(apply(Mlx.NIF, nif_fn, [ref, idx_arrays, upd_ref, axes, s()]))
+    to_nx(out, result)
+  end
+
+  defp split_indices_along_last_axis(idx_ref, idx_shape, k) do
+    ndim = tuple_size(idx_shape)
+    batch_dims = Tuple.to_list(idx_shape) |> Enum.take(ndim - 1)
+
+    for i <- 0..(k - 1) do
+      start = List.duplicate(0, ndim - 1) ++ [i]
+      stop = batch_dims ++ [i + 1]
+      strides = List.duplicate(1, ndim)
+      sliced = unwrap!(Mlx.NIF.mlx_slice(idx_ref, start, stop, strides, s()))
+      unwrap!(Mlx.NIF.mlx_squeeze(sliced, [ndim - 1], s()))
+    end
+  end
+
+  defp reshape_updates_for_scatter(upd_ref, indices_shape, input_shape, axes) do
+    idx_ndim = tuple_size(indices_shape) - 1
+    idx_batch = Tuple.to_list(indices_shape) |> Enum.take(idx_ndim)
+
+    slice_sizes =
+      input_shape
+      |> Tuple.to_list()
+      |> Enum.with_index()
+      |> Enum.map(fn {dim, i} -> if i in axes, do: 1, else: dim end)
+
+    target_shape = idx_batch ++ slice_sizes
+    unwrap!(Mlx.NIF.mlx_reshape(upd_ref, target_shape, s()))
+  end
+
+  # --- Convolution ---
+  # Satisfies: B1 (Nx.Backend callbacks)
+
+  @impl true
+  def conv(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor, %Nx.Tensor{} = kernel, opts) do
+    batch_group_size = opts[:batch_group_size] || 1
+
+    if batch_group_size > 1 do
+      # batch_group_size > 1 not supported by MLX, fall back to BinaryBackend
+      Nx.BinaryBackend.conv(
+        out,
+        Nx.backend_transfer(tensor, Nx.BinaryBackend),
+        Nx.backend_transfer(kernel, Nx.BinaryBackend),
+        opts
+      )
+    else
+      do_conv(out, tensor, kernel, opts)
+    end
+  end
+
+  defp do_conv(out, tensor, kernel, opts) do
+    input_ref = from_ref(tensor)
+    kernel_ref = from_ref(kernel)
+
+    strides = opts[:strides]
+    padding = opts[:padding]
+    input_dilation = opts[:input_dilation]
+    kernel_dilation = opts[:kernel_dilation]
+    groups = opts[:feature_group_size] || 1
+    input_perm = opts[:input_permutation]
+    kernel_perm = opts[:kernel_permutation]
+    output_perm = opts[:output_permutation]
+
+    ndim = tuple_size(tensor.shape)
+
+    # Step 1: Apply input/kernel permutations to get standard NCHW/OIHW format
+    input_std = unwrap!(Mlx.NIF.mlx_transpose(input_ref, input_perm, s()))
+    kernel_std = unwrap!(Mlx.NIF.mlx_transpose(kernel_ref, kernel_perm, s()))
+
+    # Step 2: Convert NCHW to channels-last (N, spatial..., C) for MLX
+    nchw_to_cl = [0] ++ Enum.to_list(2..(ndim - 1)) ++ [1]
+    input_cl = unwrap!(Mlx.NIF.mlx_transpose(input_std, nchw_to_cl, s()))
+    kernel_cl = unwrap!(Mlx.NIF.mlx_transpose(kernel_std, nchw_to_cl, s()))
+
+    # Step 3: Split padding into low and high
+    pad_lo = Enum.map(padding, fn {lo, _} -> lo end)
+    pad_hi = Enum.map(padding, fn {_, hi} -> hi end)
+
+    # Step 4: Call MLX conv_general (flip=false for cross-correlation)
+    result =
+      unwrap!(
+        Mlx.NIF.mlx_conv_general(
+          input_cl,
+          kernel_cl,
+          strides,
+          pad_lo,
+          pad_hi,
+          kernel_dilation,
+          input_dilation,
+          groups,
+          false,
+          s()
+        )
+      )
+
+    # Step 5: Convert output from channels-last back to NCHW
+    cl_to_nchw = [0, ndim - 1] ++ Enum.to_list(1..(ndim - 2))
+    result_nchw = unwrap!(Mlx.NIF.mlx_transpose(result, cl_to_nchw, s()))
+
+    # Step 6: Apply output permutation
+    result_final = unwrap!(Mlx.NIF.mlx_transpose(result_nchw, output_perm, s()))
+
+    to_nx(out, result_final)
+  end
+
+  # --- To Batched ---
+
+  @impl true
+  def to_batched(%Nx.Tensor{} = out, %Nx.Tensor{} = tensor, opts) do
+    ref = from_ref(tensor)
+    leftover = opts[:leftover] || :repeat
+
+    batch_size = elem(out.shape, 0)
+    total = elem(tensor.shape, 0)
+
+    if total == 0 do
+      []
+    else
+      {split_ref, num_splits} =
+        case leftover do
+          :discard ->
+            n = div(total, batch_size)
+            keep = n * batch_size
+
+            trimmed =
+              if keep < total do
+                start = List.duplicate(0, tuple_size(tensor.shape))
+                stop = [keep | tl(Tuple.to_list(tensor.shape))]
+                strides = List.duplicate(1, tuple_size(tensor.shape))
+                unwrap!(Mlx.NIF.mlx_slice(ref, start, stop, strides, s()))
+              else
+                ref
+              end
+
+            {trimmed, n}
+
+          :repeat ->
+            if rem(total, batch_size) == 0 do
+              {ref, div(total, batch_size)}
+            else
+              n = div(total + batch_size - 1, batch_size)
+              pad_amount = n * batch_size - total
+
+              start = List.duplicate(0, tuple_size(tensor.shape))
+              stop = [pad_amount | tl(Tuple.to_list(tensor.shape))]
+              strides = List.duplicate(1, tuple_size(tensor.shape))
+              pad_slice = unwrap!(Mlx.NIF.mlx_slice(ref, start, stop, strides, s()))
+              padded = unwrap!(Mlx.NIF.mlx_concatenate([ref, pad_slice], 0, s()))
+              {padded, n}
+            end
+        end
+
+      if num_splits == 0 do
+        []
+      else
+        parts = unwrap!(Mlx.NIF.mlx_split_equal_parts(split_ref, num_splits, 0, s()))
+        Enum.map(parts, fn part_ref -> to_nx(out, part_ref) end)
+      end
+    end
+  end
+
   # --- Private helpers ---
 
   defp number_to_binary(number, {type, size}) do
@@ -785,43 +1033,24 @@ defmodule Mlx.Backend do
   # These raise clear errors instead of generating compiler warnings.
 
   @not_implemented_ops ~w(
-    conv count_leading_zeros fft from_pointer gather ifft indexed_add
-    indexed_put population_count reduce to_batched to_pointer window_max
-    window_min window_product window_reduce window_scatter_max
-    window_scatter_min window_sum
+    count_leading_zeros from_pointer population_count reduce to_pointer
+    window_max window_min window_product window_reduce
+    window_scatter_max window_scatter_min window_sum
   )a
 
   for op <- @not_implemented_ops do
     arity =
       case op do
-        :to_pointer ->
+        op when op in [:to_pointer, :count_leading_zeros, :population_count] ->
           2
 
-        op when op in [:fft, :ifft, :to_batched] ->
-          3
-
-        op when op in [:conv, :gather, :window_max, :window_min, :window_product, :window_sum] ->
+        op when op in [:window_max, :window_min, :window_product, :window_sum] ->
           4
 
-        op when op in [:indexed_add, :indexed_put] ->
+        op when op in [:from_pointer, :reduce] ->
           5
 
-        op when op in [:count_leading_zeros, :population_count] ->
-          2
-
-        :from_pointer ->
-          5
-
-        :reduce ->
-          5
-
-        :window_reduce ->
-          6
-
-        :window_scatter_max ->
-          6
-
-        :window_scatter_min ->
+        op when op in [:window_reduce, :window_scatter_max, :window_scatter_min] ->
           6
 
         _ ->
