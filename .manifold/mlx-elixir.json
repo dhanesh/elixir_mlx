@@ -128,7 +128,7 @@
       },
       {
         "id": "RT-9",
-        "status": "NOT_SATISFIED",
+        "status": "SATISFIED",
         "maps_to": ["O3", "T5"]
       },
       {
@@ -244,6 +244,12 @@
         "type": "ops",
         "satisfies": ["O1", "O2", "O3", "RT-10"],
         "status": "generated"
+      },
+      {
+        "path": ".github/workflows/precompile.yml",
+        "type": "ops",
+        "satisfies": ["O3", "RT-9"],
+        "status": "generated"
       }
     ],
     "coverage": {
@@ -335,6 +341,12 @@
       "phase": "verify",
       "timestamp": "2026-02-15T22:00:00Z",
       "result": "Re-verification after implementing 7 new Nx.Backend callbacks (52→59): fft, ifft, gather, indexed_add, indexed_put, conv, to_batched. 177 tests, 0 failures. 9/9 invariants satisfied (100%), 2/2 boundaries satisfied (100%), 0/7 goals fully satisfied (all PARTIAL). RT-5 advanced from 73% to 83% callback coverage. @not_implemented_ops reduced from 19 to 12. 2 non-blocking gaps remain (G8: precompiled binaries, G10: 12 remaining ops — most lack mlx-c API)."
+    },
+    {
+      "number": 10,
+      "phase": "verify",
+      "timestamp": "2026-02-16T00:00:00Z",
+      "result": "G8 resolved: Added cc_precompiler 0.1.11 to mix.exs with precompiler config (aarch64-apple-darwin, NIF 2.16/2.17). Created .github/workflows/precompile.yml (macos-14, OTP 25+27 matrix, uploads tarballs on v* tags). Makefile CC ?= clang for compiler override. Checksum file in hex package. RT-9 upgraded to SATISFIED. 177 tests, 0 failures. 1 non-blocking gap remains (G10: 12 remaining ops)."
     }
   ],
   "convergence": {
@@ -381,7 +393,7 @@
       "RT-6": {"type": "required_truth", "status": "REQUIRED"},
       "RT-7": {"type": "required_truth", "status": "REQUIRED"},
       "RT-8": {"type": "required_truth", "status": "REQUIRED"},
-      "RT-9": {"type": "required_truth", "status": "REQUIRED"},
+      "RT-9": {"type": "required_truth", "status": "SATISFIED"},
       "RT-10": {"type": "required_truth", "status": "REQUIRED"}
     },
     "edges": {

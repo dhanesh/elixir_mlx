@@ -1,6 +1,6 @@
 {
   "verification": {
-    "timestamp": "2026-02-15T22:00:00Z",
+    "timestamp": "2026-02-16T00:00:00Z",
     "result": "PARTIAL",
     "matrix": [
       {
@@ -171,13 +171,13 @@
       {
         "constraint": "O3",
         "type": "goal",
-        "code": false,
+        "code": true,
         "test": null,
         "docs": null,
-        "ops": false,
+        "ops": true,
         "status": "PARTIAL",
-        "gap": "mix.exs has basic config. LICENSE exists. No precompiled binary setup (cc_precompiler), no Hex publish workflow in CI.",
-        "action": "Add cc_precompiler or elixir_make precomp to mix.exs. Add Hex publish step to CI."
+        "gap": "cc_precompiler configured in mix.exs. Precompile CI workflow created (.github/workflows/precompile.yml). Makefile CC override enabled. Checksum file in package. Still needs: actual Hex publish, CHANGELOG.md.",
+        "action": "Publish to Hex after first tagged release triggers precompile CI."
       }
     ],
     "coverage": {
@@ -247,9 +247,8 @@
       },
       {
         "id": "RT-9",
-        "status": "NOT_SATISFIED",
-        "evidence": "Build from source only. No cc_precompiler, no precompiled binary CI workflow.",
-        "action": "Add cc_precompiler to mix.exs. Create CI job to build+upload precompiled binaries."
+        "status": "SATISFIED",
+        "evidence": "cc_precompiler 0.1.11 added to mix.exs. Precompiler config targets aarch64-apple-darwin with NIF versions 2.16/2.17. CI workflow (.github/workflows/precompile.yml) builds on macos-14 for OTP 25+27, uploads tarballs to GitHub Release on v* tags. Makefile CC ?= clang enables compiler override. Checksum file included in hex package."
       },
       {
         "id": "RT-10",
@@ -258,13 +257,6 @@
       }
     ],
     "gaps": [
-      {
-        "id": "G8",
-        "constraint": "O3",
-        "severity": "non-blocking",
-        "issue": "No precompiled binary infrastructure (cc_precompiler).",
-        "action": "Add cc_precompiler to mix.exs. Set up CI precompile workflow."
-      },
       {
         "id": "G10",
         "constraint": "B1",
