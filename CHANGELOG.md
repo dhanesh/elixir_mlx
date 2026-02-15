@@ -4,6 +4,39 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-02-16
+
+### New Modules
+
+- **Mlx.Transforms** — MLX-native function transforms: `grad`, `value_and_grad`, `vjp`, `jvp`, `vmap`
+  via closure bridge pattern (C trampoline + Elixir helper process)
+- **Mlx.NN** — Functional neural network operations: 13 activations (relu, gelu, silu, etc.),
+  5 loss functions (mse, cross_entropy, etc.), functional layers (linear, embedding, dropout),
+  re-exports from Mlx.Fast (layer_norm, rms_norm, sdpa, rope)
+- **Mlx.Hub** — HuggingFace Hub integration: download, snapshot_download, list_repo_files,
+  cached_path with local disk caching (requires optional `req` dep)
+- **Mlx.Models** — High-level model loading pipeline: load_model_state (download → load →
+  dequantize → unflatten → Axon.ModelState), load_config, unflatten_params, to_model_state
+
+### Enhancements
+
+- **mlx-c upgraded to v0.5.0** (targets MLX v0.30.6, was v0.1.2)
+- **Mlx.IO.load_weights/1,2** — Unified weight loader with format auto-detection (.npy,
+  .safetensors, directories), sharded safetensors support, optional dtype casting
+- Python comparison test suite (44 tests vs pre-generated Python MLX reference values)
+- Error quality tests (11 tests asserting error message content)
+
+### Dependencies
+
+- `jason` promoted from test-only to runtime dependency
+- `req ~> 0.5` added as optional dependency (for Mlx.Hub)
+- `axon ~> 0.8` and `polaris ~> 0.1` changed from test-only to optional
+
+### Stats
+
+- 469 tests, 0 failures (up from 350 in v0.1.0)
+- ~136 NIFs in c_src/mlx_nif.c
+
 ## [0.1.0] - 2026-02-16
 
 Initial release of ElixirMlx — MLX bindings for Elixir via mlx-c.
@@ -81,6 +114,7 @@ Initial release of ElixirMlx — MLX bindings for Elixir via mlx-c.
 
 - f64 not supported (Metal limitation)
 - `from_pointer`/`to_pointer` not supported (use `Nx.from_binary`/`Nx.to_binary`)
-- Function transforms (grad, vmap) require mlx-c closure support (future)
+- Function transforms (grad, vmap) require mlx-c closure support (added in v0.2.0)
 
+[0.2.0]: https://github.com/elixir-mlx/elixir_mlx/releases/tag/v0.2.0
 [0.1.0]: https://github.com/elixir-mlx/elixir_mlx/releases/tag/v0.1.0
