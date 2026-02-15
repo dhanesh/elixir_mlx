@@ -29,10 +29,15 @@ jobs:
           path: |
             deps
             _build
-            c_src/mlx-c
-          key: ${{ runner.os }}-mix-${{ hashFiles('mix.lock') }}-mlx
+          key: ${{ runner.os }}-mix-${{ hashFiles('mix.lock') }}
           restore-keys: |
             ${{ runner.os }}-mix-
+
+      - name: Cache mlx-c
+        uses: actions/cache@v4
+        with:
+          path: c_src/mlx-c
+          key: ${{ runner.os }}-mlx-c-${{ hashFiles('Makefile') }}
 
       - name: Install dependencies
         run: mix deps.get
