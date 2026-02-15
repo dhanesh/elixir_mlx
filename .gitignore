@@ -15,3 +15,6 @@ erl_crash.dump
 # mlx-c build artifacts
 /mlx-c/
 /c_src/mlx-c/
+
+# Precompiled NIF checksums (generated during release)
+/checksum-*.exs

@@ -1,0 +1,39 @@
+name: Precompile NIF
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  precompile:
+    name: Precompile (${{ matrix.otp }})
+    runs-on: macos-14
+    strategy:
+      matrix:
+        include:
+          - otp: "25"
+            elixir: "1.16"
+          - otp: "27"
+            elixir: "1.18"
+    env:
+      MIX_ENV: prod
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
+      - name: Install deps
+        run: |
+          mix local.hex --force
+          mix local.rebar --force
+          mix deps.get
+      - name: Build precompiled NIF
+        run: |
+          export ELIXIR_MAKE_CACHE_DIR=$(pwd)/cache
+          mkdir -p "${ELIXIR_MAKE_CACHE_DIR}"
+          mix elixir_make.precompile
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: cache/*.tar.gz

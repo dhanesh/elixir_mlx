@@ -15,7 +15,7 @@ MLX_C_LIB = $(MLX_C_BUILD_DIR)/libmlxc.a
 MLX_LIB = $(MLX_C_BUILD_DIR)/_deps/mlx-build/libmlx.a
 
 # Compiler flags
-CC = clang
+CC ?= clang
 CFLAGS = -O2 -Wall -Wextra -fPIC -std=c11 \
          -I$(ERTS_INCLUDE_DIR) \
          -I$(MLX_C_INCLUDE_DIR)
