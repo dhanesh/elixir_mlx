@@ -102,6 +102,91 @@ defmodule Mlx.IO do
     {tensors, metadata}
   end
 
+  @doc """
+  Load weights from a file or directory, returning a flat map of `%{String.t() => Nx.Tensor.t()}`.
+
+  Supports `.npy` files, `.safetensors` files, and directories containing
+  `model.safetensors` or sharded safetensors with an index file.
+
+  ## Options
+    * `:format` - force format (`:npy` or `:safetensors`), auto-detected by default
+    * `:dtype` - Nx type to cast all tensors to (e.g. `{:f, 16}`)
+
+  ## Examples
+
+      weights = Mlx.IO.load_weights("/path/to/model.safetensors")
+      weights = Mlx.IO.load_weights("/path/to/model_dir")
+      weights = Mlx.IO.load_weights("/path/to/array.npy")
+  """
+  def load_weights(path, opts \\ []) when is_binary(path) do
+    format = Keyword.get(opts, :format)
+    dtype = Keyword.get(opts, :dtype)
+
+    tensors =
+      cond do
+        File.dir?(path) ->
+          load_weights_from_dir(path)
+
+        format == :npy || (!format && String.ends_with?(path, ".npy")) ->
+          %{"weights" => load(path)}
+
+        format == :safetensors || (!format && String.ends_with?(path, ".safetensors")) ->
+          {tensors_map, _metadata} = load_safetensors(path)
+          tensors_map
+
+        true ->
+          raise ArgumentError,
+                "cannot detect format for #{path}; use :format option or a recognized extension (.npy, .safetensors)"
+      end
+
+    maybe_cast_dtype(tensors, dtype)
+  end
+
+  defp load_weights_from_dir(dir) do
+    index_path = Path.join(dir, "model.safetensors.index.json")
+    single_path = Path.join(dir, "model.safetensors")
+
+    cond do
+      File.exists?(index_path) ->
+        load_sharded_safetensors(dir, index_path)
+
+      File.exists?(single_path) ->
+        {tensors_map, _metadata} = load_safetensors(single_path)
+        tensors_map
+
+      true ->
+        raise ArgumentError,
+              "directory #{dir} does not contain model.safetensors or model.safetensors.index.json"
+    end
+  end
+
+  defp load_sharded_safetensors(dir, index_path) do
+    index = index_path |> File.read!() |> Jason.decode!()
+    weight_map = Map.get(index, "weight_map", %{})
+
+    # Group weights by shard file — load each shard file only once
+    shards_to_keys =
+      Enum.group_by(weight_map, fn {_key, shard_file} -> shard_file end, fn {key, _shard} -> key end)
+
+    Enum.reduce(shards_to_keys, %{}, fn {shard_file, keys}, acc ->
+      shard_path = Path.join(dir, shard_file)
+      {shard_tensors, _metadata} = load_safetensors(shard_path)
+
+      Enum.reduce(keys, acc, fn key, inner_acc ->
+        case Map.fetch(shard_tensors, key) do
+          {:ok, tensor} -> Map.put(inner_acc, key, tensor)
+          :error -> inner_acc
+        end
+      end)
+    end)
+  end
+
+  defp maybe_cast_dtype(tensors, nil), do: tensors
+
+  defp maybe_cast_dtype(tensors, dtype) do
+    Map.new(tensors, fn {key, tensor} -> {key, Nx.as_type(tensor, dtype)} end)
+  end
+
   # Helpers
 
   defp to_nx_infer(ref) do

@@ -50,10 +50,11 @@ defmodule ElixirMlx.MixProject do
       {:elixir_make, "~> 0.8", runtime: false},
       {:cc_precompiler, "~> 0.1", runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
-      {:axon, "~> 0.8", only: :test},
-      {:polaris, "~> 0.1", only: :test},
+      {:axon, "~> 0.8", optional: true},
+      {:polaris, "~> 0.1", optional: true},
       {:scholar, "~> 0.4", only: :test},
-      {:jason, "~> 1.4", only: :test}
+      {:jason, "~> 1.4"},
+      {:req, "~> 0.5", optional: true}
     ]
   end
 
